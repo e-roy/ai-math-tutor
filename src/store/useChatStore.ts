@@ -20,6 +20,7 @@ interface ChatStore {
   setStreamingTurnType: (type: TurnType | null) => void;
   finalizeStreaming: (turn: Turn) => void;
   clearStreaming: () => void;
+  resetConversation: () => void;
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -63,6 +64,16 @@ export const useChatStore = create<ChatStore>((set) => ({
 
   clearStreaming: () =>
     set({
+      isStreaming: false,
+      streamingText: "",
+      streamingTurnType: null,
+    }),
+
+  resetConversation: () =>
+    set({
+      conversationId: null,
+      turns: [],
+      isLoading: false,
       isStreaming: false,
       streamingText: "",
       streamingTurnType: null,

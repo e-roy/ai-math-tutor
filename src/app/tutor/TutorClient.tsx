@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 
 import dynamic from "next/dynamic";
 
@@ -8,6 +8,8 @@ import { api } from "@/trpc/react";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { ChatPane } from "@/components/ChatPane";
 import { MathRenderer } from "@/components/MathRenderer";
+import { ConversationSidebar } from "@/components/ConversationSidebar";
+import { SidebarInset } from "@/components/ui/sidebar";
 import { useChatStore } from "@/store/useChatStore";
 import type { UploadedImage } from "@/types/files";
 
@@ -26,28 +28,48 @@ const Whiteboard = dynamic(
 
 export function TutorClient() {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
-  const hasInitiatedCreation = useRef(false);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
 
-  const createConversation = api.conversations.create.useMutation();
   const parseImage = api.ocr.parseImage.useMutation();
+  const setConversationId = useChatStore((state) => state.setConversationId);
+  const resetConversation = useChatStore((state) => state.resetConversation);
+  const clearTurns = useChatStore((state) => state.clearTurns);
+  const setTurns = useChatStore((state) => state.setTurns);
 
+  // Load turns when conversation is selected
+  const { data: loadedTurns, isLoading: isLoadingTurns } = api.conversations.getTurns.useQuery(
+    { conversationId: selectedConversationId! },
+    { enabled: !!selectedConversationId },
+  );
+
+  // Update store when turns are loaded
   useEffect(() => {
-    // Create a new conversation on mount if we don't have one
-    // Use ref to prevent multiple calls
-    if (!hasInitiatedCreation.current && !createConversation.data) {
-      hasInitiatedCreation.current = true;
-      createConversation.mutate(undefined, {
-        onSuccess: () => {
-          // Mutation state will update automatically
-        },
-        onError: () => {
-          // Reset on error so user can retry
-          hasInitiatedCreation.current = false;
-        },
-      });
+    if (loadedTurns && selectedConversationId) {
+      setTurns(loadedTurns);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [loadedTurns, selectedConversationId, setTurns]);
+
+  // Update conversation ID in store when selected
+  useEffect(() => {
+    if (selectedConversationId) {
+      setConversationId(selectedConversationId);
+    }
+  }, [selectedConversationId, setConversationId]);
+
+  const handleSelectConversation = (conversationId: string) => {
+    // Reset state when switching conversations
+    resetConversation();
+    clearTurns();
+    setUploadedImages([]);
+    setSelectedConversationId(conversationId);
+  };
+
+  const handleNewConversation = () => {
+    // Reset state for new conversation
+    resetConversation();
+    clearTurns();
+    setUploadedImages([]);
+  };
 
   const handleUploadSuccess = async (fileId: string, blobUrl: string) => {
     // Add image to state with processing flag
@@ -97,47 +119,39 @@ export function TutorClient() {
     // TODO: Show toast notification
   };
 
-  const conversationId = createConversation.data?.conversationId ?? null;
-  const setConversationId = useChatStore((state) => state.setConversationId);
-
-  // Update store when conversation ID changes
-  useEffect(() => {
-    if (conversationId) {
-      setConversationId(conversationId);
-    }
-  }, [conversationId, setConversationId]);
-
-  if (!conversationId) {
-    return (
-      <div className="flex min-h-[400px] items-center justify-center">
-        <p className="text-muted-foreground">
-          {createConversation.isPending
-            ? "Initializing session..."
-            : createConversation.isError
-              ? "Failed to initialize session. Please refresh the page."
-              : "Initializing session..."}
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-4xl font-bold">Tutor</h1>
-        <p className="text-muted-foreground mt-4">
-          Upload a screenshot or type your math problem to get started.
-        </p>
-      </div>
+    <ConversationSidebar
+      selectedConversationId={selectedConversationId}
+      onSelectConversation={handleSelectConversation}
+      onNewConversation={handleNewConversation}
+    >
+      <SidebarInset>
+        {!selectedConversationId ? (
+          <div className="flex min-h-[400px] items-center justify-center">
+            <div className="text-center space-y-4">
+              <h2 className="text-2xl font-semibold">No conversation selected</h2>
+              <p className="text-muted-foreground">
+                Select a conversation from the sidebar or create a new one to get started.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6 p-6">
+            <div>
+              <h1 className="text-4xl font-bold">Tutor</h1>
+              <p className="text-muted-foreground mt-4">
+                Upload a screenshot or type your math problem to get started.
+              </p>
+            </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="space-y-4">
-          <UploadDropzone
-            conversationId={conversationId}
-            onUploadSuccess={handleUploadSuccess}
-            onUploadError={handleUploadError}
-            className="max-w-2xl"
-          />
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+              <div className="space-y-4">
+                <UploadDropzone
+                  conversationId={selectedConversationId}
+                  onUploadSuccess={handleUploadSuccess}
+                  onUploadError={handleUploadError}
+                  className="max-w-2xl"
+                />
 
           {uploadedImages.length > 0 && (
             <div className="space-y-4">
@@ -192,17 +206,20 @@ export function TutorClient() {
             </div>
           )}
         </div>
-        <div className="space-y-4">
-          <div className="h-[600px] rounded-lg border">
-            <ChatPane conversationId={conversationId} />
-          </div>
-        </div>
-      </div>
+              <div className="space-y-4">
+                <div className="h-[600px] rounded-lg border">
+                  <ChatPane conversationId={selectedConversationId} />
+                </div>
+              </div>
+            </div>
 
-      <div className="mt-6">
-        <h2 className="text-2xl font-semibold mb-4">Whiteboard</h2>
-        <Whiteboard conversationId={conversationId} />
-      </div>
-    </div>
+            <div className="mt-6">
+              <h2 className="text-2xl font-semibold mb-4">Whiteboard</h2>
+              <Whiteboard conversationId={selectedConversationId} />
+            </div>
+          </div>
+        )}
+      </SidebarInset>
+    </ConversationSidebar>
   );
 }

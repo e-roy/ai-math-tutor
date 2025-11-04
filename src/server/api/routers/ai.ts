@@ -11,6 +11,7 @@ import { SOCRATIC_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import { classifyTurnTool } from "@/lib/ai/tools";
 import { classifyTurnSchema } from "@/lib/ai/tools";
 import type { TurnClassifierResult } from "@/types/ai";
+import { generateTitleFromProblem } from "@/lib/conversations/title-generator";
 
 const openaiClient = new OpenAI({
   apiKey: env.OPENAI_API_KEY,
@@ -53,9 +54,9 @@ export const aiRouter = createTRPCRouter({
       }),
     )
     .subscription(async function* ({ input, ctx }) {
-      // Verify user owns the conversation
+      // Verify user owns the conversation and check title
       const [conversation] = await ctx.db
-        .select({ userId: conversations.userId })
+        .select({ userId: conversations.userId, title: conversations.title })
         .from(conversations)
         .where(eq(conversations.id, input.conversationId))
         .limit(1);
@@ -74,6 +75,12 @@ export const aiRouter = createTRPCRouter({
         });
       }
 
+      // Load conversation context (previous turns) to check if this is first turn
+      const previousTurns = await getTurnsByConversation(
+        ctx.db,
+        input.conversationId,
+      );
+
       // Persist user turn if provided
       let userTurnId: string | null = null;
       if (input.userText || input.userLatex) {
@@ -84,13 +91,24 @@ export const aiRouter = createTRPCRouter({
           latex: input.userLatex ?? null,
         });
         userTurnId = userTurn.id;
-      }
 
-      // Load conversation context (previous turns)
-      const previousTurns = await getTurnsByConversation(
-        ctx.db,
-        input.conversationId,
-      );
+        // Auto-generate title from first user message if conversation doesn't have one
+        if (!conversation.title && previousTurns.length === 0) {
+          const titleText = input.userText ?? (input.userLatex ? `Solve: ${input.userLatex}` : "");
+          if (titleText) {
+            const generatedTitle = generateTitleFromProblem(titleText);
+            try {
+              await ctx.db
+                .update(conversations)
+                .set({ title: generatedTitle })
+                .where(eq(conversations.id, input.conversationId));
+            } catch (error) {
+              // Non-fatal: title generation failed, but turn succeeded
+              console.error("Failed to update conversation title:", error);
+            }
+          }
+        }
+      }
 
       // Build conversation history from turns
       const messages: Array<{

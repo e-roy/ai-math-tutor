@@ -6,6 +6,7 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { env } from "@/lib/env";
 import { files, conversations } from "@/server/db/schema";
+import { generateTitleFromProblem } from "@/lib/conversations/title-generator";
 
 const openai = new OpenAI({
   apiKey: env.OPENAI_API_KEY,
@@ -32,11 +33,12 @@ export const ocrRouter = createTRPCRouter({
         });
       }
 
-      // Verify user owns the conversation
+      // Verify user owns the conversation and check if title needs updating
       const conversationId = file.conversationId;
       const [conversation] = await ctx.db
         .select({
           userId: conversations.userId,
+          title: conversations.title,
         })
         .from(conversations)
         .where(eq(conversations.id, conversationId))
@@ -174,6 +176,20 @@ export const ocrRouter = createTRPCRouter({
           message: "Failed to save extracted text. Please try again.",
           cause: error,
         });
+      }
+
+      // Auto-generate title from OCR text if conversation doesn't have one
+      if (!conversation.title && extractedText) {
+        const generatedTitle = generateTitleFromProblem(extractedText);
+        try {
+          await ctx.db
+            .update(conversations)
+            .set({ title: generatedTitle })
+            .where(eq(conversations.id, conversationId));
+        } catch (error) {
+          // Non-fatal: title generation failed, but OCR succeeded
+          console.error("Failed to update conversation title:", error);
+        }
       }
 
       return {

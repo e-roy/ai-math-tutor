@@ -14,6 +14,7 @@ export const conversations = createTable(
       .references(() => users.id),
     title: d.text(),
     meta: d.jsonb().$type<Record<string, unknown>>().default({}),
+    archived: d.boolean().default(false).notNull(),
     createdAt: d
       .timestamp({ withTimezone: true, mode: "date" })
       .default(sql`CURRENT_TIMESTAMP`)
