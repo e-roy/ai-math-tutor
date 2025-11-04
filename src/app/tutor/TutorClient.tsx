@@ -5,13 +5,21 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "@/trpc/react";
 import { UploadDropzone } from "@/components/UploadDropzone";
 
+interface UploadedImage {
+  fileId: string;
+  blobUrl: string;
+  ocrText?: string;
+  ocrLatex?: string;
+  isProcessingOcr?: boolean;
+  ocrError?: string;
+}
+
 export function TutorClient() {
-  const [uploadedImages, setUploadedImages] = useState<
-    Array<{ fileId: string; blobUrl: string }>
-  >([]);
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const hasInitiatedCreation = useRef(false);
 
   const createConversation = api.conversations.create.useMutation();
+  const parseImage = api.ocr.parseImage.useMutation();
 
   useEffect(() => {
     // Create a new conversation on mount if we don't have one
@@ -31,8 +39,47 @@ export function TutorClient() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleUploadSuccess = (fileId: string, blobUrl: string) => {
-    setUploadedImages((prev) => [...prev, { fileId, blobUrl }]);
+  const handleUploadSuccess = async (fileId: string, blobUrl: string) => {
+    // Add image to state with processing flag
+    setUploadedImages((prev) => [
+      ...prev,
+      { fileId, blobUrl, isProcessingOcr: true },
+    ]);
+
+    // Call OCR to extract text from image
+    try {
+      const result = await parseImage.mutateAsync({ fileId });
+      // Update image with OCR results
+      setUploadedImages((prev) =>
+        prev.map((img) =>
+          img.fileId === fileId
+            ? {
+                ...img,
+                ocrText: result.text,
+                ocrLatex: result.latex,
+                isProcessingOcr: false,
+              }
+            : img,
+        ),
+      );
+    } catch (error) {
+      // Update image with error state
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : "Failed to extract text from image. Please try again.";
+      setUploadedImages((prev) =>
+        prev.map((img) =>
+          img.fileId === fileId
+            ? {
+                ...img,
+                isProcessingOcr: false,
+                ocrError: errorMessage,
+              }
+            : img,
+        ),
+      );
+    }
   };
 
   const handleUploadError = (error: Error) => {
@@ -79,13 +126,41 @@ export function TutorClient() {
             {uploadedImages.map((image) => (
               <div
                 key={image.fileId}
-                className="border-border bg-muted/50 relative overflow-hidden rounded-lg border"
+                className="border-border bg-muted/50 relative space-y-4 rounded-lg border p-4"
               >
                 <img
                   src={image.blobUrl}
                   alt="Uploaded problem"
                   className="h-auto max-h-[600px] w-full object-contain"
                 />
+                <div className="space-y-2">
+                  {image.isProcessingOcr && (
+                    <div className="text-muted-foreground text-sm">
+                      Processing image...
+                    </div>
+                  )}
+                  {image.ocrError && (
+                    <div className="text-destructive text-sm">
+                      Error: {image.ocrError}
+                    </div>
+                  )}
+                  {image.ocrText && !image.isProcessingOcr && (
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium">Extracted Text:</div>
+                      <div className="bg-background rounded-md border p-3 text-sm">
+                        {image.ocrText}
+                      </div>
+                      {image.ocrLatex && (
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium">LaTeX:</div>
+                          <div className="bg-background rounded-md border p-3 font-mono text-sm">
+                            {image.ocrLatex}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>
