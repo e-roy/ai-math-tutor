@@ -4,6 +4,8 @@ import { useState, useEffect, useRef } from "react";
 
 import { api } from "@/trpc/react";
 import { UploadDropzone } from "@/components/UploadDropzone";
+import { ChatPane } from "@/components/ChatPane";
+import { useChatStore } from "@/store/useChatStore";
 
 interface UploadedImage {
   fileId: string;
@@ -88,6 +90,14 @@ export function TutorClient() {
   };
 
   const conversationId = createConversation.data?.conversationId ?? null;
+  const setConversationId = useChatStore((state) => state.setConversationId);
+
+  // Update store when conversation ID changes
+  useEffect(() => {
+    if (conversationId) {
+      setConversationId(conversationId);
+    }
+  }, [conversationId, setConversationId]);
 
   if (!conversationId) {
     return (
@@ -112,12 +122,14 @@ export function TutorClient() {
         </p>
       </div>
 
-      <UploadDropzone
-        conversationId={conversationId}
-        onUploadSuccess={handleUploadSuccess}
-        onUploadError={handleUploadError}
-        className="max-w-2xl"
-      />
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <UploadDropzone
+            conversationId={conversationId}
+            onUploadSuccess={handleUploadSuccess}
+            onUploadError={handleUploadError}
+            className="max-w-2xl"
+          />
 
       {uploadedImages.length > 0 && (
         <div className="space-y-4">
@@ -166,6 +178,13 @@ export function TutorClient() {
           </div>
         </div>
       )}
+        </div>
+        <div className="space-y-4">
+          <div className="border rounded-lg h-[600px]">
+            <ChatPane conversationId={conversationId} />
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
