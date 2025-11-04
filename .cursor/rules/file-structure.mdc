@@ -54,38 +54,60 @@ tailwindcss class-variance-authority clsx
 /src
   /app
     /(auth)          # sign-in/out routes
+    /api
+      /auth/[...nextauth]/route.ts  # Next.js auth route handler
+      /trpc/[trpc]/route.ts         # tRPC Next handler
     /tutor           # main tutoring UI (chat + whiteboard)
     /progress        # mastery overview & skill detail
     layout.tsx
     page.tsx
   /components
+    /ui              # shadcn/ui component library
     ChatPane.tsx
     TutorSidebar.tsx
     MathRenderer.tsx       # KaTeX wrapper
     UploadDropzone.tsx
     Whiteboard.tsx         # Excalidraw embed
+  /hooks
+    use-mobile.ts    # React hooks
   /lib
     env.ts                 # @t3-oss/env-nextjs
+    utils.ts               # utility functions (cn helper, etc.)
     db.ts                  # Neon + Drizzle client
     ai/                    # prompts, guardrails, classifiers
     math/                  # mathjs helpers, equivalence check
     whiteboard/            # scene adapters, ai-draw helpers
   /server
-    /db/schema.ts          # Drizzle tables
-    /api/trpc/[trpc].ts    # tRPC Next handler
-    /api/routers
-      ai.ts                # tutorTurn (LLM stream)
-      ocr.ts               # parseImage (Vision)
-      board.ts             # get/save/snapshot
-      files.ts             # blob upload finalize
-      progress.ts          # updateMastery/getOverview
-    /api/root.ts           # mergeRouters
-    auth.ts                # next-auth config
+    /auth
+      config.ts            # next-auth configuration
+      index.ts             # auth exports
+    /db
+      schema.ts            # Drizzle tables
+      index.ts             # DB client
+      auth.ts              # auth-related DB helpers
+      boards.ts            # board operations
+      conversations.ts     # conversation operations
+      files.ts             # file operations
+      progress.ts          # progress/mastery operations
+      utils.ts             # DB utilities
+    /api
+      trpc.ts              # tRPC configuration/setup
+      root.ts              # mergeRouters
+      /routers
+        ai.ts              # tutorTurn (LLM stream)
+        ocr.ts             # parseImage (Vision)
+        board.ts           # get/save/snapshot
+        files.ts           # blob upload finalize
+        progress.ts        # updateMastery/getOverview
   /store
     useChatStore.ts
     useSessionStore.ts
   /styles
     globals.css
+  /trpc
+    query-client.ts        # React Query client
+    react.tsx              # React hooks/provider
+    server.ts              # server-side helpers
   /types
     ai.ts                  # shared types for tool outputs
     board.ts               # Excalidraw scene types
