@@ -1,21 +1,32 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import OpenAI from "openai";
+import { streamText } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { TRPCError } from "@trpc/server";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { env } from "@/lib/env";
-import { conversations, files } from "@/server/db/schema";
+import { conversations, files, boards } from "@/server/db/schema";
 import { createTurn, getTurnsByConversation } from "@/server/db/turns";
 import { SOCRATIC_SYSTEM_PROMPT } from "@/lib/ai/prompts";
-import { classifyTurnTool } from "@/lib/ai/tools";
-import { classifyTurnSchema } from "@/lib/ai/tools";
+import {
+  classifyTurnTool,
+  boardAnnotationTool,
+  classifyTurnSchema,
+  boardAnnotationSchema,
+} from "@/lib/ai/tools";
 import type { TurnClassifierResult } from "@/types/ai";
 import { generateTitleFromProblem } from "@/lib/conversations/title-generator";
-
-const openaiClient = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-});
+import {
+  drawBox,
+  drawArrow,
+  drawLabel,
+  insertLatexAsImage,
+} from "@/lib/whiteboard/ai-draw-helpers";
+import {
+  dbFormatToScene,
+  sceneToDbFormat,
+} from "@/lib/whiteboard/scene-adapters";
+import type { ExcalidrawScene } from "@/types/board";
 
 /**
  * Extract LaTeX expressions from text
@@ -23,21 +34,24 @@ const openaiClient = new OpenAI({
  */
 function extractLatex(text: string): string | null {
   // Match $...$ (inline math)
-  const inlineMatch = text.match(/\$([^$]+)\$/);
-  if (inlineMatch) {
-    return inlineMatch[1]?.trim() ?? null;
+  const inlineRegex = /\$([^$]+)\$/;
+  const inlineMatch = inlineRegex.exec(text);
+  if (inlineMatch?.[1]?.trim()) {
+    return inlineMatch[1].trim();
   }
 
   // Match \(...\) (inline math)
-  const inlineParenMatch = text.match(/\\\(([^)]+)\\\)/);
-  if (inlineParenMatch) {
-    return inlineParenMatch[1]?.trim() ?? null;
+  const inlineParenRegex = /\\\(([^)]+)\\\)/;
+  const inlineParenMatch = inlineParenRegex.exec(text);
+  if (inlineParenMatch?.[1]?.trim()) {
+    return inlineParenMatch[1].trim();
   }
 
   // Match \[...\] (display math)
-  const displayMatch = text.match(/\\\[([^\]]+)\\\]/);
-  if (displayMatch) {
-    return displayMatch[1]?.trim() ?? null;
+  const displayRegex = /\\\[([^\]]+)\\\]/;
+  const displayMatch = displayRegex.exec(text);
+  if (displayMatch?.[1]?.trim()) {
+    return displayMatch[1].trim();
   }
 
   return null;
@@ -82,19 +96,19 @@ export const aiRouter = createTRPCRouter({
       );
 
       // Persist user turn if provided
-      let userTurnId: string | null = null;
       if (input.userText || input.userLatex) {
-        const userTurn = await createTurn(ctx.db, {
+        await createTurn(ctx.db, {
           conversationId: input.conversationId,
           role: "user",
           text: input.userText ?? null,
           latex: input.userLatex ?? null,
         });
-        userTurnId = userTurn.id;
 
         // Auto-generate title from first user message if conversation doesn't have one
         if (!conversation.title && previousTurns.length === 0) {
-          const titleText = input.userText ?? (input.userLatex ? `Solve: ${input.userLatex}` : "");
+          const titleText =
+            input.userText ??
+            (input.userLatex ? `Solve: ${input.userLatex}` : "");
           if (titleText) {
             const generatedTitle = generateTitleFromProblem(titleText);
             try {
@@ -152,51 +166,32 @@ export const aiRouter = createTRPCRouter({
           .where(eq(files.id, input.fileId))
           .limit(1);
 
-        if (file?.ocrText) {
+        const ocrText = file?.ocrText;
+        if (ocrText && typeof ocrText === "string") {
           // Add file context to the last user message or create a new one
           const lastMessage = messages[messages.length - 1];
-          if (lastMessage && lastMessage.role === "user") {
-            lastMessage.content = `Problem from image: ${file.ocrText}\n\n${lastMessage.content}`;
+          if (lastMessage?.role === "user") {
+            lastMessage.content = `Problem from image: ${ocrText}\n\n${lastMessage.content}`;
           } else {
             messages.push({
               role: "user",
-              content: `Problem from image: ${file.ocrText}`,
+              content: `Problem from image: ${ocrText}`,
             });
           }
         }
       }
 
       // Stream the response using Vercel AI SDK
-      // Note: For tRPC streaming, we'll use subscription pattern
-      // Using OpenAI directly for now - will need @ai-sdk/openai for proper integration
-      const completion = await openaiClient.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "classifyTurn",
-              description:
-                "Classify the type of your tutoring response to help the UI display appropriate badges and styling. Use this after every assistant response.",
-              parameters: {
-                type: "object",
-                properties: {
-                  type: {
-                    type: "string",
-                    enum: ["ask", "hint", "validate", "refocus"],
-                    description:
-                      "The type of turn: 'ask' for guiding questions, 'hint' for concrete hints after 2+ stuck turns, 'validate' for checking work/answers, 'refocus' for redirecting to the problem or key concepts",
-                  },
-                },
-                required: ["type"],
-              },
-            },
-          },
-        ],
-        tool_choice: "auto",
-        stream: true,
-        max_tokens: 500,
+      const result = streamText({
+        model: openai("gpt-4o-mini"),
+        messages: messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        tools: {
+          classifyTurn: classifyTurnTool,
+          addBoardAnnotation: boardAnnotationTool,
+        },
       });
 
       // Process streaming response
@@ -204,35 +199,144 @@ export const aiRouter = createTRPCRouter({
       let turnType: TurnClassifierResult["type"] | null = null;
       let toolMetadata: unknown = null;
 
-      for await (const chunk of completion) {
-        const delta = chunk.choices[0]?.delta;
-        if (!delta) continue;
+      // Stream text chunks
+      for await (const chunk of result.textStream) {
+        fullText += chunk;
+        yield { type: "text", content: chunk };
+      }
 
-        // Handle text content
-        if (delta.content) {
-          fullText += delta.content;
-          yield { type: "text", content: delta.content };
-        }
+      // Process tool calls after streaming completes
+      const toolCalls = await result.toolCalls;
+      let boardAnnotations: unknown[] | null = null;
 
-        // Handle tool calls (turn classifier)
-        if (delta.tool_calls) {
-          for (const toolCall of delta.tool_calls) {
-            if (toolCall.function?.name === "classifyTurn") {
-              try {
-                const args = JSON.parse(
-                  toolCall.function.arguments ?? "{}",
-                ) as { type?: string };
-                if (args.type) {
-                  const parsed = classifyTurnSchema.parse({ type: args.type });
-                  turnType = parsed.type;
-                  toolMetadata = { type: parsed.type };
-                }
-              } catch {
-                // Ignore parse errors
+      for (const toolCall of toolCalls) {
+        if (
+          toolCall.toolName === "classifyTurn" &&
+          toolCall.type === "tool-call" &&
+          "input" in toolCall
+        ) {
+          try {
+            // toolCall.input is already parsed by the AI SDK
+            const parsed = classifyTurnSchema.parse(toolCall.input);
+            turnType = parsed.type;
+            toolMetadata = { type: parsed.type };
+          } catch {
+            // Ignore parse errors
+          }
+        } else if (
+          toolCall.toolName === "addBoardAnnotation" &&
+          toolCall.type === "tool-call" &&
+          "input" in toolCall
+        ) {
+          try {
+            const parsed = boardAnnotationSchema.parse(toolCall.input);
+            // Get current board state
+            const [board] = await ctx.db
+              .select()
+              .from(boards)
+              .where(eq(boards.conversationId, input.conversationId))
+              .limit(1);
+
+            let currentScene: ExcalidrawScene;
+            let currentVersion: number;
+
+            if (board) {
+              currentScene = dbFormatToScene(board.scene);
+              currentVersion = (board.version as number | null) ?? 1;
+            } else {
+              currentScene = {
+                elements: [],
+                appState: {},
+                files: {},
+              };
+              currentVersion = 1;
+            }
+
+            // Create new elements from annotations
+            const newElements: unknown[] = [];
+            for (const element of parsed.elements) {
+              if (element.type === "box") {
+                newElements.push(
+                  drawBox(
+                    element.x,
+                    element.y,
+                    element.width,
+                    element.height,
+                    element.label,
+                  ),
+                );
+              } else if (element.type === "arrow") {
+                newElements.push(
+                  drawArrow(
+                    element.x1,
+                    element.y1,
+                    element.x2,
+                    element.y2,
+                    element.label,
+                  ),
+                );
+              } else if (element.type === "label") {
+                newElements.push(
+                  drawLabel(
+                    element.x,
+                    element.y,
+                    element.text,
+                    element.fontSize,
+                  ),
+                );
+              } else if (element.type === "latex") {
+                newElements.push(
+                  insertLatexAsImage(
+                    element.x,
+                    element.y,
+                    element.latex,
+                    element.width,
+                    element.height,
+                  ),
+                );
               }
             }
+
+            // Merge new elements into existing scene
+            const updatedScene: ExcalidrawScene = {
+              ...currentScene,
+              elements: [...(currentScene.elements ?? []), ...newElements],
+            };
+
+            // Save updated board
+            const sceneData = sceneToDbFormat(updatedScene);
+            if (board) {
+              // Update existing board
+              await ctx.db
+                .update(boards)
+                .set({
+                  scene: sceneData,
+                  version: currentVersion + 1,
+                })
+                .where(eq(boards.id, board.id as string));
+            } else {
+              // Create new board
+              await ctx.db.insert(boards).values({
+                conversationId: input.conversationId,
+                scene: sceneData,
+                version: 1,
+              });
+            }
+
+            boardAnnotations = newElements;
+          } catch (error) {
+            // Log error but don't fail the turn
+            console.error("Failed to add board annotations:", error);
           }
         }
+      }
+
+      // Yield board annotation event if any were added
+      if (boardAnnotations && boardAnnotations.length > 0) {
+        yield {
+          type: "boardAnnotation",
+          elements: boardAnnotations,
+        };
       }
 
       // Extract LaTeX from response if present
@@ -254,6 +358,27 @@ export const aiRouter = createTRPCRouter({
         fullText: fullText,
         latex: latex,
         turnType: turnType,
+      };
+    }),
+
+  verifyEquivalence: protectedProcedure
+    .input(
+      z.object({
+        studentAnswer: z.string().min(1),
+        expectedAnswer: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      // Import validation logic
+      const { validateAnswer } = await import("@/lib/math/llm-validate");
+      const result = await validateAnswer(
+        input.studentAnswer,
+        input.expectedAnswer,
+      );
+      return {
+        isEquivalent: result.isEquivalent,
+        confidence: result.confidence,
+        reason: result.reason,
       };
     }),
 });

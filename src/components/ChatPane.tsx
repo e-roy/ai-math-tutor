@@ -10,6 +10,7 @@ import { MathAnswerBox } from "@/components/MathAnswerBox";
 import { useChatStore } from "@/store/useChatStore";
 import { api } from "@/trpc/react";
 import { Send } from "lucide-react";
+import { checkEquivalence } from "@/lib/math/equivalence";
 
 interface ChatPaneProps {
   conversationId: string;
@@ -64,6 +65,9 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
       onData: (data) => {
         if (data.type === "text" && data.content) {
           appendStreamingText(data.content);
+        } else if (data.type === "boardAnnotation") {
+          // Board annotations were added - refetch board to update Whiteboard
+          void utils.board.get.invalidate({ conversationId });
         } else if (data.type === "done") {
           // Create a turn object from the done message
           if (data.turnId && data.fullText !== undefined) {
@@ -79,6 +83,8 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
             finalizeStreaming(turn);
             // Invalidate turns query to refresh
             void utils.conversations.getTurns.invalidate({ conversationId });
+            // Also refetch board in case annotations were added
+            void utils.board.get.invalidate({ conversationId });
           }
           // Disable subscription after completion
           setSubscriptionEnabled(false);
@@ -150,7 +156,10 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
     setSubscriptionEnabled(true);
   };
 
-  const handleMathAnswerSubmit = (answer: string, latex?: string) => {
+  const verifyEquivalence = api.ai.verifyEquivalence.useMutation();
+  const updateMastery = api.progress.updateMastery.useMutation();
+
+  const handleMathAnswerSubmit = async (answer: string, latex?: string) => {
     if (!conversationId || isStreaming) return;
 
     // Create user turn immediately (optimistic update)
@@ -164,6 +173,56 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
       createdAt: new Date(),
     };
     setTurns([...turns, userTurn]);
+
+    // Try to validate answer client-side first
+    // TODO: Extract expected answer from conversation context or problem
+    // For now, we'll just validate that the answer is a valid expression
+    // and let the AI tutor verify correctness through conversation
+    
+    // If we have an expected answer (from context), validate equivalence
+    // For MVP, we'll skip this and let the tutor handle validation
+    // const expectedAnswer = extractExpectedAnswer(turns);
+    // if (expectedAnswer) {
+    //   const clientResult = checkEquivalence(answer, expectedAnswer);
+    //   let isValid = clientResult.isEquivalent;
+    //   
+    //   if (clientResult.confidence === "low") {
+    //     // Call server endpoint for LLM validation
+    //     try {
+    //       const serverResult = await verifyEquivalence.mutateAsync({
+    //         studentAnswer: answer,
+    //         expectedAnswer: expectedAnswer,
+    //       });
+    //       isValid = serverResult.isEquivalent;
+    //     } catch (error) {
+    //       console.error("Validation error:", error);
+    //     }
+    //   }
+    //   
+    //   // Update mastery if answer is correct
+    //   // TODO: Extract skillId from conversation context or problem
+    //   if (isValid) {
+    //     try {
+    //       await updateMastery.mutateAsync({
+    //         skillId: "extracted-from-context", // TODO: Extract from context
+    //         level: calculateMasteryLevel(turns), // TODO: Implement level calculation
+    //         evidence: {
+    //           turnIds: [userTurn.id],
+    //           snapshotIds: [],
+    //           rubric: {
+    //             accuracy: 1.0,
+    //             method: "correct",
+    //             explanation: "Student provided correct answer",
+    //           },
+    //         },
+    //       });
+    //       // Invalidate progress query to refresh UI
+    //       void utils.progress.getOverview.invalidate();
+    //     } catch (error) {
+    //       console.error("Failed to update mastery:", error);
+    //     }
+    //   }
+    // }
 
     // Start streaming
     setStreaming(true);

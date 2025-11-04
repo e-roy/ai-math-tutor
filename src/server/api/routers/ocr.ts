@@ -1,16 +1,12 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import OpenAI from "openai";
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { TRPCError } from "@trpc/server";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
-import { env } from "@/lib/env";
 import { files, conversations } from "@/server/db/schema";
 import { generateTitleFromProblem } from "@/lib/conversations/title-generator";
-
-const openai = new OpenAI({
-  apiKey: env.OPENAI_API_KEY,
-});
 
 export const ocrRouter = createTRPCRouter({
   parseImage: protectedProcedure
@@ -73,11 +69,11 @@ export const ocrRouter = createTRPCRouter({
         });
       }
 
-      // Call OpenAI Vision API
+      // Call OpenAI Vision API using Vercel AI SDK
       let visionResponse;
       try {
-        visionResponse = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
+        visionResponse = await generateText({
+          model: openai("gpt-4o-mini"),
           messages: [
             {
               role: "system",
@@ -88,10 +84,8 @@ export const ocrRouter = createTRPCRouter({
               role: "user",
               content: [
                 {
-                  type: "image_url",
-                  image_url: {
-                    url: blobUrl,
-                  },
+                  type: "image",
+                  image: blobUrl,
                 },
                 {
                   type: "text",
@@ -100,7 +94,6 @@ export const ocrRouter = createTRPCRouter({
               ],
             },
           ],
-          max_tokens: 500,
         });
       } catch (error) {
         throw new TRPCError({
@@ -112,7 +105,7 @@ export const ocrRouter = createTRPCRouter({
       }
 
       // Parse response to extract text and optional LaTeX
-      const content = visionResponse.choices[0]?.message?.content;
+      const content = visionResponse.text;
       if (!content) {
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
