@@ -1,0 +1,137 @@
+---
+alwaysApply: true
+---
+
+AI Math Tutor (Socratic, Web)
+
+## Tech Stack (Locked)
+
+- **Framework:** Next.js (App Router) + TypeScript
+- **State:** zustand (UI) + React Query
+- **API:** tRPC v10 (App Router handlers)
+- **Auth:** next-auth (Auth.js) + Postgres adapter
+- **DB/ORM:** Neon Postgres + Drizzle ORM
+- **UI:** Tailwind + shadcn/ui
+- **LLM:** Vercel AI SDK (OpenAI text + vision)
+- **Whiteboard:** Excalidraw (single user + AI)
+- **Storage:** Vercel Blob
+- **Math:** KaTeX (render) + mathjs (validate)
+
+## Packages (Core)
+
+```
+next react typescript
+@trpc/server @trpc/client @trpc/react-query @trpc/next
+@tanstack/react-query
+next-auth
+drizzle-orm drizzle-kit pg @neondatabase/serverless
+zod
+ai openai
+@excalidraw/excalidraw
+katex mathjs
+zustand
+tailwindcss class-variance-authority clsx
+@t3-oss/env-nextjs
+```
+
+## Project Goals
+
+- Socratic tutoring (no direct answers), multi-turn chat with math rendering.
+- Problem intake: text + screenshot → Vision OCR.
+- Persistent progress (ages 4–18): skills/mastery with evidence (turns + board snapshots).
+- Whiteboard with AI annotations, autosave, versioned snapshots.
+- Ship a working MVP quickly; Node runtime for all server code.
+
+## Non-Goals (MVP)
+
+- Multi-human realtime collaboration.
+- External analytics/telemetry (Sentry/PostHog).
+- KV/Redis rate limiting (soft guards only).
+
+## File Structure (high-level)
+
+```
+/src
+  /app
+    /(auth)          # sign-in/out routes
+    /tutor           # main tutoring UI (chat + whiteboard)
+    /progress        # mastery overview & skill detail
+    layout.tsx
+    page.tsx
+  /components
+    ChatPane.tsx
+    TutorSidebar.tsx
+    MathRenderer.tsx       # KaTeX wrapper
+    UploadDropzone.tsx
+    Whiteboard.tsx         # Excalidraw embed
+  /lib
+    env.ts                 # @t3-oss/env-nextjs
+    db.ts                  # Neon + Drizzle client
+    ai/                    # prompts, guardrails, classifiers
+    math/                  # mathjs helpers, equivalence check
+    whiteboard/            # scene adapters, ai-draw helpers
+  /server
+    /db/schema.ts          # Drizzle tables
+    /api/trpc/[trpc].ts    # tRPC Next handler
+    /api/routers
+      ai.ts                # tutorTurn (LLM stream)
+      ocr.ts               # parseImage (Vision)
+      board.ts             # get/save/snapshot
+      files.ts             # blob upload finalize
+      progress.ts          # updateMastery/getOverview
+    /api/root.ts           # mergeRouters
+    auth.ts                # next-auth config
+  /store
+    useChatStore.ts
+    useSessionStore.ts
+  /styles
+    globals.css
+  /types
+    ai.ts                  # shared types for tool outputs
+    board.ts               # Excalidraw scene types
+```
+
+## tRPC Surface (signatures)
+
+- `ai.tutorTurn({ conversationId, userText?, userLatex?, fileId? }) -> stream`
+- `ocr.parseImage({ fileId }) -> { text, latex? }`
+- `board.get({ conversationId }) -> { scene, version }`
+- `board.save({ conversationId, scene, version }) -> { ok }`
+- `board.snapshot({ boardId, version, scene }) -> { snapshotId }`
+- `files.getUploadUrl() -> { url, token }`
+- `files.finalize({ conversationId, blobUrl }) -> { fileId }`
+- `progress.updateMastery({ skillId, level, evidence? }) -> { ok }`
+- `progress.getOverview() -> { domains, skills, mastery }`
+
+## Drizzle Schema (essentials)
+
+- `users(id, email, name, created_at)`
+- `conversations(id, user_id, title, meta_json, created_at)`
+- `turns(id, conversation_id, role, text, latex, tool_json, created_at)`
+- `files(id, conversation_id, blob_url, kind, ocr_text, meta_json, created_at)`
+- `boards(id, conversation_id, scene_json, version, updated_at)`
+- `board_snapshots(id, board_id, version, scene_json, created_at)`
+- `standards(id, domain, code, grade_band, description)`
+- `skills(id, standard_id, topic, subtopic, skill_key, description)`
+- `mastery(id, user_id, skill_id, mastery_level, evidence_json, updated_at)`
+- `milestones(id, user_id, title, notes, evidence_json, created_at)`
+
+## Implementation Rules
+
+- Assume dev server is running; do **not** add scripts to start it.
+- **No `any`**; use strict TypeScript. Keep files **≤ 350 LoC**.
+- Types in `/types`; helpers in `/lib`.
+- Validate all inputs with **Zod**. Auth-guard all mutations.
+- Node runtime for all procedures (uploads, Vision, DB).
+- Persist turns/board changes before updating UI; throttle board autosave.
+- When unsure, **ask** concise clarifying questions in comments/TODOs.
+
+## UI Notes
+
+- shadcn/ui components for form, dialog, sheet, button, input.
+- KaTeX for math rendering; optional Mathlive later (not in MVP).
+- Excalidraw: embed via `@excalidraw/excalidraw`, persist `scene_json`, add minimal AI draw helpers (box/arrow/label), support snapshots.
+
+## Done Criteria (MVP)
+
+- Login → Upload screenshot → OCR text → Socratic dialog → Whiteboard annotations → Progress updated → Refresh/resume restores conversation, board, and mastery.
