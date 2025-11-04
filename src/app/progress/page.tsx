@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
+import { ProgressOverview } from "./ProgressOverview";
 
 export default async function ProgressPage() {
   const session = await auth();
@@ -10,10 +11,13 @@ export default async function ProgressPage() {
 
   return (
     <main className="container py-8">
-      <h1 className="text-4xl font-bold">Progress</h1>
-      <p className="mt-4 text-muted-foreground">
-        Your learning progress and mastery overview will appear here.
-      </p>
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold">Progress</h1>
+        <p className="mt-2 text-muted-foreground">
+          Track your learning progress and mastery across different skills and domains.
+        </p>
+      </div>
+      <ProgressOverview />
     </main>
   );
 }
