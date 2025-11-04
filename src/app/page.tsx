@@ -24,14 +24,23 @@ export default async function Home() {
               <p className="text-center text-2xl text-white">
                 {session && <span>Logged in as {session.user?.name}</span>}
               </p>
-              <Button asChild>
-                <Link
-                  href={session ? "/api/auth/signout" : "/api/auth/signin"}
-                  className="no-underline"
+              {session ? (
+                <form
+                  action={async () => {
+                    "use server";
+                    const { signOut } = await import("@/server/auth");
+                    await signOut({ redirectTo: "/" });
+                  }}
                 >
-                  {session ? "Sign out" : "Sign in"}
-                </Link>
-              </Button>
+                  <Button type="submit">Sign out</Button>
+                </form>
+              ) : (
+                <Button asChild>
+                  <Link href="/signin" className="no-underline">
+                    Sign in
+                  </Link>
+                </Button>
+              )}
             </div>
           </div>
         </div>
