@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import type { Turn } from "@/server/db/turns";
+import type { TurnType } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/MessageBubble";
@@ -59,22 +60,24 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
     {
       enabled: subscriptionEnabled && !!subscriptionInput,
       onData: (data) => {
-        if (data.type === "text") {
+        if (data.type === "text" && data.content) {
           appendStreamingText(data.content);
         } else if (data.type === "done") {
           // Create a turn object from the done message
-          const turn: Turn = {
-            id: data.turnId,
-            conversationId,
-            role: "assistant",
-            text: data.fullText,
-            latex: data.latex ?? null,
-            tool: data.turnType ? { type: data.turnType } : null,
-            createdAt: new Date(),
-          };
-          finalizeStreaming(turn);
-          // Invalidate turns query to refresh
-          void utils.conversations.getTurns.invalidate({ conversationId });
+          if (data.turnId && data.fullText !== undefined) {
+            const turn: Turn = {
+              id: data.turnId,
+              conversationId,
+              role: "assistant",
+              text: data.fullText,
+              latex: data.latex ?? null,
+              tool: data.turnType ? { type: data.turnType } : null,
+              createdAt: new Date(),
+            };
+            finalizeStreaming(turn);
+            // Invalidate turns query to refresh
+            void utils.conversations.getTurns.invalidate({ conversationId });
+          }
           // Disable subscription after completion
           setSubscriptionEnabled(false);
           setSubscriptionInput(null);
@@ -119,9 +122,9 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {isLoading && (
-          <div className="text-center text-muted-foreground">
+          <div className="text-muted-foreground text-center">
             Loading conversation...
           </div>
         )}
@@ -131,7 +134,9 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
             turn={turn}
             turnType={
               turn.role === "assistant"
-                ? ((turn.tool as { type?: string })?.type as TurnType | undefined)
+                ? ((turn.tool as { type?: string })?.type as
+                    | TurnType
+                    | undefined)
                 : undefined
             }
           />
@@ -176,4 +181,3 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
     </div>
   );
 }
-
