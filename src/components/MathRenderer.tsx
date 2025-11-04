@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import katex from "katex";
 import "katex/dist/katex.min.css";
+import { cn } from "@/lib/utils";
 
 interface MathRendererProps {
   latex: string;
@@ -15,7 +16,9 @@ export function MathRenderer({
   displayMode = false,
   className,
 }: MathRendererProps) {
-  const containerRef = useRef<HTMLSpanElement>(null);
+  const spanRef = useRef<HTMLSpanElement>(null);
+  const divRef = useRef<HTMLDivElement>(null);
+  const containerRef = displayMode ? divRef : spanRef;
 
   useEffect(() => {
     if (!containerRef.current || !latex) return;
@@ -35,10 +38,24 @@ export function MathRenderer({
 
   if (!latex) return null;
 
+  const defaultClassName = displayMode
+    ? "my-4 block text-center"
+    : "inline-block";
+
+  if (displayMode) {
+    return (
+      <div
+        ref={divRef}
+        className={cn(defaultClassName, className)}
+        aria-label={`Math expression: ${latex}`}
+      />
+    );
+  }
+
   return (
     <span
-      ref={containerRef}
-      className={className}
+      ref={spanRef}
+      className={cn(defaultClassName, className)}
       aria-label={`Math expression: ${latex}`}
     />
   );

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import type { Turn } from "@/server/db/turns";
 import type { TurnType } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/MessageBubble";
+import { MathAnswerBox } from "@/components/MathAnswerBox";
 import { useChatStore } from "@/store/useChatStore";
 import { api } from "@/trpc/react";
 import { Send } from "lucide-react";
@@ -51,14 +52,15 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
   const [subscriptionEnabled, setSubscriptionEnabled] = useState(false);
   const [subscriptionInput, setSubscriptionInput] = useState<{
     conversationId: string;
-    userText: string;
+    userText?: string;
+    userLatex?: string;
   } | null>(null);
 
   // Set up subscription at component level (hooks must be at top level)
   api.ai.tutorTurn.useSubscription(
     subscriptionInput ?? { conversationId: "", userText: "" },
     {
-      enabled: subscriptionEnabled && !!subscriptionInput,
+      enabled: subscriptionEnabled && !!subscriptionInput && !!conversationId,
       onData: (data) => {
         if (data.type === "text" && data.content) {
           appendStreamingText(data.content);
@@ -92,6 +94,34 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
     },
   );
 
+  // Detect if tutor is asking for a math answer
+  const isAskingForMathAnswer = useMemo(() => {
+    if (turns.length === 0 || isStreaming) return false;
+
+    const lastTurn = turns[turns.length - 1];
+    if (!lastTurn) return false;
+    if (lastTurn.role !== "assistant" || !lastTurn.text) return false;
+
+    const text = lastTurn.text.toLowerCase();
+    const mathKeywords = [
+      "what is",
+      "solve",
+      "find",
+      "calculate",
+      "answer",
+      "value",
+      "equals",
+      "=",
+    ];
+    const questionKeywords = ["?", "what", "how"];
+
+    return (
+      mathKeywords.some((keyword) => text.includes(keyword)) &&
+      (questionKeywords.some((keyword) => text.includes(keyword)) ||
+        text.includes("="))
+    );
+  }, [turns, isStreaming]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !conversationId || isStreaming) return;
@@ -117,6 +147,34 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
 
     // Trigger subscription
     setSubscriptionInput({ conversationId, userText });
+    setSubscriptionEnabled(true);
+  };
+
+  const handleMathAnswerSubmit = (answer: string, latex?: string) => {
+    if (!conversationId || isStreaming) return;
+
+    // Create user turn immediately (optimistic update)
+    const userTurn: Turn = {
+      id: crypto.randomUUID(), // Temporary ID
+      conversationId,
+      role: "user",
+      text: answer,
+      latex: latex ?? null,
+      tool: null,
+      createdAt: new Date(),
+    };
+    setTurns([...turns, userTurn]);
+
+    // Start streaming
+    setStreaming(true);
+    setStreamingTurnType(null);
+
+    // Trigger subscription with userLatex
+    setSubscriptionInput({
+      conversationId,
+      userText: answer,
+      userLatex: latex,
+    });
     setSubscriptionEnabled(true);
   };
 
@@ -159,25 +217,38 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
         )}
         <div ref={messagesEndRef} />
       </div>
-      <form onSubmit={handleSubmit} className="border-t p-4">
-        <div className="flex gap-2">
-          <Textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Type your message or math problem..."
-            className="min-h-[60px] resize-none"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                void handleSubmit(e);
-              }
-            }}
-          />
-          <Button type="submit" disabled={!input.trim() || isStreaming}>
-            <Send className="h-4 w-4" />
-          </Button>
-        </div>
-      </form>
+      <div className="space-y-2 border-t p-4">
+        {isAskingForMathAnswer && (
+          <div className="pb-2">
+            <p className="text-muted-foreground mb-2 text-sm">
+              Enter your math answer:
+            </p>
+            <MathAnswerBox
+              onSubmit={handleMathAnswerSubmit}
+              disabled={isStreaming}
+            />
+          </div>
+        )}
+        <form onSubmit={handleSubmit}>
+          <div className="flex gap-2">
+            <Textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Type your message or math problem..."
+              className="min-h-[60px] resize-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  void handleSubmit(e);
+                }
+              }}
+            />
+            <Button type="submit" disabled={!input.trim() || isStreaming}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }

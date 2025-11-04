@@ -4,6 +4,7 @@ import type { Turn } from "@/server/db/turns";
 import type { TurnType } from "@/types/ai";
 import { Badge } from "@/components/ui/badge";
 import { MathRenderer } from "@/components/MathRenderer";
+import { MathText } from "@/components/MathText";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {
@@ -61,7 +62,9 @@ export function MessageBubble({
           </div>
         )}
         {displayText && (
-          <div className="whitespace-pre-wrap break-words">{displayText}</div>
+          <div>
+            <MathText text={displayText} />
+          </div>
         )}
         {turn.latex && (
           <div className="mt-2">

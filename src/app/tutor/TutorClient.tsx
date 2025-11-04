@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { api } from "@/trpc/react";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { ChatPane } from "@/components/ChatPane";
+import { MathRenderer } from "@/components/MathRenderer";
 import { useChatStore } from "@/store/useChatStore";
 import type { UploadedImage } from "@/types/files";
 
@@ -159,8 +160,11 @@ export function TutorClient() {
                           {image.ocrLatex && (
                             <div className="space-y-1">
                               <div className="text-sm font-medium">LaTeX:</div>
-                              <div className="bg-background rounded-md border p-3 font-mono text-sm">
-                                {image.ocrLatex}
+                              <div className="bg-background rounded-md border p-3">
+                                <MathRenderer
+                                  latex={image.ocrLatex}
+                                  displayMode={true}
+                                />
                               </div>
                             </div>
                           )}
