@@ -1,16 +1,16 @@
-### Phase 4 — Progress Model (Detailed, Ages 4–18)
+### Phase 4 — Progress Model (Detailed, Ages 4–18) ✅
 
 **Goal:** Flexible mastery tracking across grade bands.
 **Tasks:**
 
-* Add standards/skills/mastery/milestones tables and migrations.
+- Add standards/skills/mastery/milestones tables and migrations.
   **Schema**
 
 ```ts
 export const standards = pgTable("standards", {
   id: uuid("id").defaultRandom().primaryKey(),
-  domain: text("domain").notNull(),        // Number Sense, Algebra, etc.
-  code: text("code").notNull(),            // e.g., G6.EE.1
+  domain: text("domain").notNull(), // Number Sense, Algebra, etc.
+  code: text("code").notNull(), // e.g., G6.EE.1
   gradeBand: text("grade_band").notNull(), // K–2, 3–5, 6–8, 9–12
   description: text("description"),
 });
@@ -45,6 +45,5 @@ export const milestones = pgTable("milestones", {
 
 **Acceptance Criteria:**
 
-* CRUD operations for these tables succeed.
-* Foreign key relationships enforced (by app logic if not using FK).
-
+- CRUD operations for these tables succeed.
+- Foreign key relationships enforced (by app logic if not using FK).

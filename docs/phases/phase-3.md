@@ -1,14 +1,21 @@
-### Phase 3 — Database Foundations (Drizzle + Neon)
+### Phase 3 — Database Foundations (Drizzle + Neon) ✅
 
 **Goal:** Core tables and migrations ready.
 **Tasks:**
 
-* Add base schema and migrations; connect to Neon.
+- Add base schema and migrations; connect to Neon.
   **Schema (minimal)**
 
 ```ts
 // /db/schema.ts
-import { pgTable, text, timestamp, jsonb, integer, uuid } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  timestamp,
+  jsonb,
+  integer,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 export const users = pgTable("users", {
   id: text("id").primaryKey(), // from next-auth
@@ -64,5 +71,5 @@ export const boardSnapshots = pgTable("board_snapshots", {
 
 **Acceptance Criteria:**
 
-* `drizzle-kit generate` + `migrate` run clean.
-* One test insert/query per table passes.
+- `drizzle-kit generate` + `migrate` run clean.
+- One test insert/query per table passes.

@@ -1,4 +1,4 @@
-### Phase 2 — Auth (next-auth + Postgres)
+### Phase 2 — Auth (next-auth + Postgres) ✅
 
 **Goal:** Sign-in/out, session-in-context, DB-backed users.
 **Tasks:**
