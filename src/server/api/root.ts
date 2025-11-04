@@ -1,4 +1,9 @@
 import { createCallerFactory, createTRPCRouter, publicProcedure } from "@/server/api/trpc";
+import { aiRouter } from "@/server/api/routers/ai";
+import { boardRouter } from "@/server/api/routers/board";
+import { filesRouter } from "@/server/api/routers/files";
+import { ocrRouter } from "@/server/api/routers/ocr";
+import { progressRouter } from "@/server/api/routers/progress";
 
 /**
  * This is the primary router for your server.
@@ -6,8 +11,12 @@ import { createCallerFactory, createTRPCRouter, publicProcedure } from "@/server
  * All routers added in /api/routers should be manually added here.
  */
 export const appRouter = createTRPCRouter({
-  // Placeholder router until MVP routers are added
   health: publicProcedure.query(() => ({ status: "ok" })),
+  ai: aiRouter,
+  ocr: ocrRouter,
+  board: boardRouter,
+  progress: progressRouter,
+  files: filesRouter,
 });
 
 // export type definition of API
