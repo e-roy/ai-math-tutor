@@ -14,7 +14,15 @@ export const env = createEnv({
     OPENAI_API_KEY: z.string().min(1),
     BLOB_READ_WRITE_TOKEN: z.string().min(1),
     NEXTAUTH_SECRET: z.string().min(1),
-    NEXTAUTH_URL: z.string().url(),
+    NEXTAUTH_URL: z.preprocess((val) => {
+      // Auto-detect from Vercel URL if not provided
+      if (val && typeof val === "string") return val;
+      if (process.env.VERCEL_URL) {
+        return `https://${process.env.VERCEL_URL}`;
+      }
+      return val;
+    }, z.string().url()),
+    VERCEL_URL: z.string().optional(),
   },
 
   /**
@@ -36,7 +44,12 @@ export const env = createEnv({
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN,
     NEXTAUTH_SECRET: process.env.NEXTAUTH_SECRET,
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL,
+    NEXTAUTH_URL:
+      process.env.NEXTAUTH_URL ??
+      (process.env.VERCEL_URL
+        ? `https://${process.env.VERCEL_URL}`
+        : undefined),
+    VERCEL_URL: process.env.VERCEL_URL,
   },
   /**
    * Run `build` or `dev` with `SKIP_ENV_VALIDATION` to skip env validation. This is especially
