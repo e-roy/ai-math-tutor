@@ -2,12 +2,27 @@
 
 import { useState, useEffect, useRef } from "react";
 
+import dynamic from "next/dynamic";
+
 import { api } from "@/trpc/react";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { ChatPane } from "@/components/ChatPane";
 import { MathRenderer } from "@/components/MathRenderer";
 import { useChatStore } from "@/store/useChatStore";
 import type { UploadedImage } from "@/types/files";
+
+// Dynamically import Whiteboard to avoid SSR issues with Excalidraw
+const Whiteboard = dynamic(
+  () => import("@/components/Whiteboard").then((mod) => ({ default: mod.Whiteboard })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-[70vh] items-center justify-center rounded-xl border">
+        <p className="text-muted-foreground">Loading whiteboard...</p>
+      </div>
+    ),
+  },
+);
 
 export function TutorClient() {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -182,6 +197,11 @@ export function TutorClient() {
             <ChatPane conversationId={conversationId} />
           </div>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <h2 className="text-2xl font-semibold mb-4">Whiteboard</h2>
+        <Whiteboard conversationId={conversationId} />
       </div>
     </div>
   );
