@@ -6,15 +6,7 @@ import { api } from "@/trpc/react";
 import { UploadDropzone } from "@/components/UploadDropzone";
 import { ChatPane } from "@/components/ChatPane";
 import { useChatStore } from "@/store/useChatStore";
-
-interface UploadedImage {
-  fileId: string;
-  blobUrl: string;
-  ocrText?: string;
-  ocrLatex?: string;
-  isProcessingOcr?: boolean;
-  ocrError?: string;
-}
+import type { UploadedImage } from "@/types/files";
 
 export function TutorClient() {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -131,56 +123,58 @@ export function TutorClient() {
             className="max-w-2xl"
           />
 
-      {uploadedImages.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-2xl font-semibold">Uploaded Images</h2>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {uploadedImages.map((image) => (
-              <div
-                key={image.fileId}
-                className="border-border bg-muted/50 relative space-y-4 rounded-lg border p-4"
-              >
-                <img
-                  src={image.blobUrl}
-                  alt="Uploaded problem"
-                  className="h-auto max-h-[600px] w-full object-contain"
-                />
-                <div className="space-y-2">
-                  {image.isProcessingOcr && (
-                    <div className="text-muted-foreground text-sm">
-                      Processing image...
-                    </div>
-                  )}
-                  {image.ocrError && (
-                    <div className="text-destructive text-sm">
-                      Error: {image.ocrError}
-                    </div>
-                  )}
-                  {image.ocrText && !image.isProcessingOcr && (
+          {uploadedImages.length > 0 && (
+            <div className="space-y-4">
+              <h2 className="text-2xl font-semibold">Uploaded Images</h2>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {uploadedImages.map((image) => (
+                  <div
+                    key={image.fileId}
+                    className="border-border bg-muted/50 relative space-y-4 rounded-lg border p-4"
+                  >
+                    <img
+                      src={image.blobUrl}
+                      alt="Uploaded problem"
+                      className="h-auto max-h-[600px] w-full object-contain"
+                    />
                     <div className="space-y-2">
-                      <div className="text-sm font-medium">Extracted Text:</div>
-                      <div className="bg-background rounded-md border p-3 text-sm">
-                        {image.ocrText}
-                      </div>
-                      {image.ocrLatex && (
-                        <div className="space-y-1">
-                          <div className="text-sm font-medium">LaTeX:</div>
-                          <div className="bg-background rounded-md border p-3 font-mono text-sm">
-                            {image.ocrLatex}
+                      {image.isProcessingOcr && (
+                        <div className="text-muted-foreground text-sm">
+                          Processing image...
+                        </div>
+                      )}
+                      {image.ocrError && (
+                        <div className="text-destructive text-sm">
+                          Error: {image.ocrError}
+                        </div>
+                      )}
+                      {image.ocrText && !image.isProcessingOcr && (
+                        <div className="space-y-2">
+                          <div className="text-sm font-medium">
+                            Extracted Text:
                           </div>
+                          <div className="bg-background rounded-md border p-3 text-sm">
+                            {image.ocrText}
+                          </div>
+                          {image.ocrLatex && (
+                            <div className="space-y-1">
+                              <div className="text-sm font-medium">LaTeX:</div>
+                              <div className="bg-background rounded-md border p-3 font-mono text-sm">
+                                {image.ocrLatex}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+          )}
         </div>
         <div className="space-y-4">
-          <div className="border rounded-lg h-[600px]">
+          <div className="h-[600px] rounded-lg border">
             <ChatPane conversationId={conversationId} />
           </div>
         </div>
