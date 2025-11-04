@@ -1,6 +1,11 @@
-import { createCallerFactory, createTRPCRouter, publicProcedure } from "@/server/api/trpc";
+import {
+  createCallerFactory,
+  createTRPCRouter,
+  publicProcedure,
+} from "@/server/api/trpc";
 import { aiRouter } from "@/server/api/routers/ai";
 import { boardRouter } from "@/server/api/routers/board";
+import { conversationsRouter } from "@/server/api/routers/conversations";
 import { filesRouter } from "@/server/api/routers/files";
 import { ocrRouter } from "@/server/api/routers/ocr";
 import { progressRouter } from "@/server/api/routers/progress";
@@ -17,6 +22,7 @@ export const appRouter = createTRPCRouter({
   board: boardRouter,
   progress: progressRouter,
   files: filesRouter,
+  conversations: conversationsRouter,
 });
 
 // export type definition of API

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
+import { TutorClient } from "./TutorClient";
 
 export default async function TutorPage() {
   const session = await auth();
@@ -10,11 +11,7 @@ export default async function TutorPage() {
 
   return (
     <main className="container py-8">
-      <h1 className="text-4xl font-bold">Tutor</h1>
-      <p className="mt-4 text-muted-foreground">
-        Your tutoring session will appear here.
-      </p>
+      <TutorClient />
     </main>
   );
 }
-
