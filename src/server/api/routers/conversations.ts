@@ -5,6 +5,7 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { conversations } from "@/server/db/schema";
 import { getTurnsByConversation } from "@/server/db/turns";
+import type { TutorPath } from "@/types/conversation";
 
 export const conversationsRouter = createTRPCRouter({
   create: protectedProcedure
@@ -12,6 +13,7 @@ export const conversationsRouter = createTRPCRouter({
       z
         .object({
           title: z.string().optional(),
+          path: z.enum(["conversation", "whiteboard"]).optional(),
         })
         .optional(),
     )
@@ -20,11 +22,17 @@ export const conversationsRouter = createTRPCRouter({
         throw new Error("Unauthorized");
       }
 
+      const meta: Record<string, unknown> = {};
+      if (input?.path) {
+        meta.path = input.path;
+      }
+
       const [conversation] = await ctx.db
         .insert(conversations)
         .values({
           userId: ctx.session.user.id,
           title: input?.title ?? null,
+          meta: Object.keys(meta).length > 0 ? meta : {},
         })
         .returning({ id: conversations.id });
 
@@ -42,6 +50,7 @@ export const conversationsRouter = createTRPCRouter({
           archived: z.boolean().optional(),
           topic: z.string().optional(),
           grade: z.string().optional(),
+          path: z.enum(["conversation", "whiteboard"]).optional(),
         })
         .optional(),
     )
@@ -60,6 +69,11 @@ export const conversationsRouter = createTRPCRouter({
         conditions.push(eq(conversations.archived, input.archived));
       } else {
         conditions.push(eq(conversations.archived, false));
+      }
+
+      // Filter by path (stored in meta)
+      if (input?.path) {
+        conditions.push(sql`${conversations.meta}->>'path' = ${input.path}`);
       }
 
       // Filter by topic (stored in meta)
@@ -171,6 +185,64 @@ export const conversationsRouter = createTRPCRouter({
       }
 
       return { id: updated.id, title: updated.title };
+    }),
+
+  update: protectedProcedure
+    .input(
+      z.object({
+        conversationId: z.string().uuid(),
+        path: z.enum(["conversation", "whiteboard"]).optional(),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.session?.user) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Unauthorized",
+        });
+      }
+
+      // Verify user owns the conversation
+      const [conversation] = await ctx.db
+        .select({ userId: conversations.userId, meta: conversations.meta })
+        .from(conversations)
+        .where(eq(conversations.id, input.conversationId))
+        .limit(1);
+
+      if (!conversation) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Conversation not found",
+        });
+      }
+
+      if (conversation.userId !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You do not have access to this conversation",
+        });
+      }
+
+      // Update meta with new path if provided
+      const meta = (conversation.meta as Record<string, unknown>) ?? {};
+      if (input.path !== undefined) {
+        meta.path = input.path;
+      }
+
+      const [updated] = await ctx.db
+        .update(conversations)
+        .set({ meta })
+        .where(eq(conversations.id, input.conversationId))
+        .returning({ id: conversations.id, meta: conversations.meta });
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update conversation",
+        });
+      }
+
+      return { id: updated.id, meta: updated.meta };
     }),
 
   archive: protectedProcedure

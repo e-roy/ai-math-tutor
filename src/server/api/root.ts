@@ -8,6 +8,7 @@ import { boardRouter } from "@/server/api/routers/board";
 import { conversationsRouter } from "@/server/api/routers/conversations";
 import { filesRouter } from "@/server/api/routers/files";
 import { ocrRouter } from "@/server/api/routers/ocr";
+import { practiceRouter } from "@/server/api/routers/practice";
 import { progressRouter } from "@/server/api/routers/progress";
 
 /**
@@ -21,6 +22,7 @@ export const appRouter = createTRPCRouter({
   ocr: ocrRouter,
   board: boardRouter,
   progress: progressRouter,
+  practice: practiceRouter,
   files: filesRouter,
   conversations: conversationsRouter,
 });

@@ -1,0 +1,52 @@
+"use client";
+
+import { PathSwitch } from "@/components/PathSwitch";
+import { SidebarTrigger } from "@/components/ui/sidebar";
+import { Separator } from "@/components/ui/separator";
+import type { TutorPath } from "@/types/conversation";
+
+interface TutorHeaderProps {
+  currentPath: TutorPath | null;
+  onSwitchToConversation: () => void;
+  onSwitchToWhiteboard: () => void;
+}
+
+/**
+ * TutorHeader component - header for tutor page with path switching
+ */
+export function TutorHeader({
+  currentPath,
+  onSwitchToConversation,
+  onSwitchToWhiteboard,
+}: TutorHeaderProps) {
+  return (
+    <header className="bg-background flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+      <div className="flex items-center gap-2 px-4">
+        <SidebarTrigger className="-ml-1" />
+        <Separator
+          orientation="vertical"
+          className="mr-2 data-[orientation=vertical]:h-4"
+        />
+        <div className="flex flex-1 items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Tutor</h1>
+            <p className="text-muted-foreground text-sm">
+              {currentPath === "whiteboard"
+                ? "Practice mode - Chat is temporary"
+                : currentPath === "conversation"
+                  ? "Conversation mode - All chat saved"
+                  : "Select a conversation to get started"}
+            </p>
+          </div>
+          {currentPath && (
+            <PathSwitch
+              currentPath={currentPath}
+              onSwitchToConversation={onSwitchToConversation}
+              onSwitchToWhiteboard={onSwitchToWhiteboard}
+            />
+          )}
+        </div>
+      </div>
+    </header>
+  );
+}

@@ -65,6 +65,7 @@ export const aiRouter = createTRPCRouter({
         userText: z.string().min(1).optional(),
         userLatex: z.string().optional(),
         fileId: z.string().uuid().optional(),
+        ephemeral: z.boolean().optional(),
       }),
     )
     .subscription(async function* ({ input, ctx }) {
@@ -89,14 +90,17 @@ export const aiRouter = createTRPCRouter({
         });
       }
 
+      const isEphemeral = input.ephemeral === true;
+
       // Load conversation context (previous turns) to check if this is first turn
+      // For ephemeral mode, we still load turns for context but won't persist new ones
       const previousTurns = await getTurnsByConversation(
         ctx.db,
         input.conversationId,
       );
 
-      // Persist user turn if provided
-      if (input.userText || input.userLatex) {
+      // Persist user turn if provided (skip if ephemeral)
+      if ((input.userText || input.userLatex) && !isEphemeral) {
         await createTurn(ctx.db, {
           conversationId: input.conversationId,
           role: "user",
@@ -342,19 +346,24 @@ export const aiRouter = createTRPCRouter({
       // Extract LaTeX from response if present
       const latex = extractLatex(fullText);
 
-      // Persist assistant turn
-      const assistantTurn = await createTurn(ctx.db, {
-        conversationId: input.conversationId,
-        role: "assistant",
-        text: fullText,
-        latex: latex,
-        tool: toolMetadata,
-      });
+      // Persist assistant turn (skip if ephemeral)
+      let turnId: string | null = null;
+      if (!isEphemeral) {
+        const assistantTurn = await createTurn(ctx.db, {
+          conversationId: input.conversationId,
+          role: "assistant",
+          text: fullText,
+          latex: latex,
+          tool: toolMetadata,
+        });
+        turnId = assistantTurn.id;
+      }
 
       // Send final message with turn ID and metadata
+      // For ephemeral mode, turnId will be null
       yield {
         type: "done",
-        turnId: assistantTurn.id,
+        turnId: turnId ?? null,
         fullText: fullText,
         latex: latex,
         turnType: turnType,

@@ -9,9 +9,5 @@ export default async function TutorPage() {
     redirect("/signin?callbackUrl=/tutor");
   }
 
-  return (
-    <main className="container py-8">
-      <TutorClient />
-    </main>
-  );
+  return <TutorClient />;
 }

@@ -9,6 +9,7 @@ export * from "./conversations";
 export * from "./files";
 export * from "./boards";
 export * from "./progress";
+export * from "./practice";
 
 // Import tables for relations (after exports to avoid circular deps)
 import { users, accounts, sessions } from "./auth";
@@ -16,6 +17,7 @@ import { conversations, turns } from "./conversations";
 import { files } from "./files";
 import { boards, boardSnapshots } from "./boards";
 import { standards, skills, mastery, milestones } from "./progress";
+import { practiceSessions } from "./practice";
 
 // Define all relations in one place to avoid duplicate definitions
 export const usersRelations = relations(users, ({ many }) => ({
@@ -23,6 +25,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   conversations: many(conversations),
   mastery: many(mastery),
   milestones: many(milestones),
+  practiceSessions: many(practiceSessions),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -43,6 +46,7 @@ export const conversationsRelations = relations(
     turns: many(turns),
     files: many(files),
     boards: many(boards),
+    practiceSessions: many(practiceSessions),
   }),
 );
 
@@ -104,3 +108,17 @@ export const milestonesRelations = relations(milestones, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+export const practiceSessionsRelations = relations(
+  practiceSessions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [practiceSessions.userId],
+      references: [users.id],
+    }),
+    conversation: one(conversations, {
+      fields: [practiceSessions.conversationId],
+      references: [conversations.id],
+    }),
+  }),
+);

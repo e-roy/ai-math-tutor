@@ -1,8 +1,6 @@
 "use client";
 
 import { Plus } from "lucide-react";
-
-import { api } from "@/trpc/react";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -26,14 +24,7 @@ export function ConversationSidebar({
   onNewConversation,
   children,
 }: ConversationSidebarProps) {
-  const createConversation = api.conversations.create.useMutation({
-    onSuccess: (data) => {
-      onSelectConversation(data.conversationId);
-    },
-  });
-
   const handleNewConversation = () => {
-    createConversation.mutate({});
     onNewConversation();
   };
 
@@ -43,13 +34,8 @@ export function ConversationSidebar({
         <SidebarHeader>
           <div className="flex items-center justify-between px-4 py-2">
             <h2 className="text-lg font-semibold">Conversations</h2>
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleNewConversation}
-              disabled={createConversation.isPending}
-            >
-              <Plus className="h-4 w-4 mr-1" />
+            <Button variant="default" size="sm" onClick={handleNewConversation}>
+              <Plus className="mr-1 h-4 w-4" />
               New
             </Button>
           </div>
@@ -66,4 +52,3 @@ export function ConversationSidebar({
     </SidebarProvider>
   );
 }
-

@@ -2,45 +2,78 @@
 
 import { useState, useEffect } from "react";
 
-import dynamic from "next/dynamic";
-
 import { api } from "@/trpc/react";
-import { UploadDropzone } from "@/components/UploadDropzone";
-import { ChatPane } from "@/components/ChatPane";
-import { MathRenderer } from "@/components/MathRenderer";
+import { ProblemPanel } from "@/components/ProblemPanel";
+import { WhiteboardPanel } from "@/components/WhiteboardPanel";
 import { ConversationSidebar } from "@/components/ConversationSidebar";
+import { TutorHeader } from "@/components/TutorHeader";
+import { PathSwitchWarning } from "@/components/PathSwitchWarning";
+import { PathChooser } from "@/components/PathChooser";
 import { SidebarInset } from "@/components/ui/sidebar";
 import { useChatStore } from "@/store/useChatStore";
 import type { UploadedImage } from "@/types/files";
-
-// Dynamically import Whiteboard to avoid SSR issues with Excalidraw
-const Whiteboard = dynamic(
-  () => import("@/components/Whiteboard").then((mod) => ({ default: mod.Whiteboard })),
-  {
-    ssr: false,
-    loading: () => (
-      <div className="flex h-[70vh] items-center justify-center rounded-xl border">
-        <p className="text-muted-foreground">Loading whiteboard...</p>
-      </div>
-    ),
-  },
-);
+import { getConversationPath, type TutorPath } from "@/types/conversation";
 
 export function TutorClient() {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<
+    string | null
+  >(null);
+  const [selectedPath, setSelectedPath] = useState<TutorPath | null>(null);
+  const [showPathSwitchWarning, setShowPathSwitchWarning] = useState(false);
+  const [showPathChooser, setShowPathChooser] = useState(true); // Show on initial load
 
   const parseImage = api.ocr.parseImage.useMutation();
-  const setConversationId = useChatStore((state) => state.setConversationId);
-  const resetConversation = useChatStore((state) => state.resetConversation);
-  const clearTurns = useChatStore((state) => state.clearTurns);
-  const setTurns = useChatStore((state) => state.setTurns);
+  const createConversation = api.conversations.create.useMutation({
+    onSuccess: (data, variables) => {
+      setSelectedConversationId(data.conversationId);
+      if (variables && variables.path) {
+        const path = variables.path as TutorPath;
+        if (path === "conversation" || path === "whiteboard") {
+          setSelectedPath(path);
+        }
+      }
+    },
+  });
+  const setConversationId = useChatStore(
+    (state) => state.setConversationId,
+  ) as (id: string | null) => void;
+  const setTurns = useChatStore((state) => state.setTurns) as (
+    turns: ReturnType<typeof useChatStore.getState>["turns"],
+  ) => void;
+  // Extract methods directly from store state to avoid unsafe return errors
+  // Store state first, then call methods with type assertion to avoid unsafe call errors
+  const resetConversation = (): void => {
+    const state = useChatStore.getState();
+    (state.resetConversation as () => void)();
+  };
+  const clearTurns = (): void => {
+    const state = useChatStore.getState();
+    (state.clearTurns as () => void)();
+  };
 
-  // Load turns when conversation is selected
-  const { data: loadedTurns, isLoading: isLoadingTurns } = api.conversations.getTurns.useQuery(
+  // Load conversation data to get path
+  const { data: conversationData } = api.conversations.getById.useQuery(
     { conversationId: selectedConversationId! },
     { enabled: !!selectedConversationId },
   );
+
+  // Load turns when conversation is selected
+  const { data: loadedTurns } = api.conversations.getTurns.useQuery(
+    { conversationId: selectedConversationId! },
+    { enabled: !!selectedConversationId },
+  );
+
+  // Update path when conversation data is loaded
+  useEffect(() => {
+    if (conversationData) {
+      const meta = conversationData.meta as Record<string, unknown> | null;
+      const path = getConversationPath(meta);
+      setSelectedPath(path);
+    } else {
+      setSelectedPath(null);
+    }
+  }, [conversationData]);
 
   // Update store when turns are loaded
   useEffect(() => {
@@ -61,6 +94,7 @@ export function TutorClient() {
     resetConversation();
     clearTurns();
     setUploadedImages([]);
+    setSelectedPath(null);
     setSelectedConversationId(conversationId);
   };
 
@@ -69,6 +103,41 @@ export function TutorClient() {
     resetConversation();
     clearTurns();
     setUploadedImages([]);
+    setSelectedPath(null);
+    setSelectedConversationId(null);
+  };
+
+  const handleSwitchToWhiteboard = () => {
+    // Show warning dialog when switching to whiteboard
+    setShowPathSwitchWarning(true);
+  };
+
+  const handleSwitchToConversation = () => {
+    // When switching to conversation, trigger new conversation creation
+    // Reset state first
+    resetConversation();
+    clearTurns();
+    setUploadedImages([]);
+    setSelectedPath(null);
+    setSelectedConversationId(null);
+  };
+
+  const handleConfirmSwitchToWhiteboard = () => {
+    // Create new whiteboard conversation
+    // Reset state first
+    resetConversation();
+    clearTurns();
+    setUploadedImages([]);
+    setSelectedPath(null);
+    setSelectedConversationId(null);
+    createConversation.mutate({ path: "whiteboard" });
+  };
+
+  const handleSelectPath = (path: TutorPath) => {
+    // Close modal immediately before starting mutation
+    setShowPathChooser(false);
+    // Create conversation with selected path
+    createConversation.mutate({ path });
   };
 
   const handleUploadSuccess = async (fileId: string, blobUrl: string) => {
@@ -119,6 +188,51 @@ export function TutorClient() {
     // TODO: Show toast notification
   };
 
+  // If no conversation selected, show only PathChooser (no sidebar, no content)
+  // Don't show if we're currently creating a conversation
+  if (!selectedConversationId && !createConversation.isPending) {
+    return (
+      <>
+        <PathChooser
+          open={showPathChooser}
+          onOpenChange={setShowPathChooser}
+          onSelectPath={handleSelectPath}
+        />
+      </>
+    );
+  }
+
+  // Show loading state while creating conversation
+  if (createConversation.isPending) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="space-y-4 text-center">
+          <h2 className="text-2xl font-semibold">Creating conversation...</h2>
+          <p className="text-muted-foreground">Please wait</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If whiteboard path, show WhiteboardPanel without sidebar
+  if (selectedPath === "whiteboard" && selectedConversationId) {
+    return (
+      <>
+        <WhiteboardPanel conversationId={selectedConversationId} />
+        <PathSwitchWarning
+          open={showPathSwitchWarning}
+          onOpenChange={setShowPathSwitchWarning}
+          onConfirm={handleConfirmSwitchToWhiteboard}
+        />
+      </>
+    );
+  }
+
+  // If conversation path, show sidebar + ProblemPanel
+  if (!selectedConversationId) {
+    return null; // Should not reach here, but safety check
+  }
+
   return (
     <ConversationSidebar
       selectedConversationId={selectedConversationId}
@@ -126,100 +240,25 @@ export function TutorClient() {
       onNewConversation={handleNewConversation}
     >
       <SidebarInset>
-        {!selectedConversationId ? (
-          <div className="flex min-h-[400px] items-center justify-center">
-            <div className="text-center space-y-4">
-              <h2 className="text-2xl font-semibold">No conversation selected</h2>
-              <p className="text-muted-foreground">
-                Select a conversation from the sidebar or create a new one to get started.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-6 p-6">
-            <div>
-              <h1 className="text-4xl font-bold">Tutor</h1>
-              <p className="text-muted-foreground mt-4">
-                Upload a screenshot or type your math problem to get started.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="space-y-4">
-                <UploadDropzone
-                  conversationId={selectedConversationId}
-                  onUploadSuccess={handleUploadSuccess}
-                  onUploadError={handleUploadError}
-                  className="max-w-2xl"
-                />
-
-          {uploadedImages.length > 0 && (
-            <div className="space-y-4">
-              <h2 className="text-2xl font-semibold">Uploaded Images</h2>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {uploadedImages.map((image) => (
-                  <div
-                    key={image.fileId}
-                    className="border-border bg-muted/50 relative space-y-4 rounded-lg border p-4"
-                  >
-                    <img
-                      src={image.blobUrl}
-                      alt="Uploaded problem"
-                      className="h-auto max-h-[600px] w-full object-contain"
-                    />
-                    <div className="space-y-2">
-                      {image.isProcessingOcr && (
-                        <div className="text-muted-foreground text-sm">
-                          Processing image...
-                        </div>
-                      )}
-                      {image.ocrError && (
-                        <div className="text-destructive text-sm">
-                          Error: {image.ocrError}
-                        </div>
-                      )}
-                      {image.ocrText && !image.isProcessingOcr && (
-                        <div className="space-y-2">
-                          <div className="text-sm font-medium">
-                            Extracted Text:
-                          </div>
-                          <div className="bg-background rounded-md border p-3 text-sm">
-                            {image.ocrText}
-                          </div>
-                          {image.ocrLatex && (
-                            <div className="space-y-1">
-                              <div className="text-sm font-medium">LaTeX:</div>
-                              <div className="bg-background rounded-md border p-3">
-                                <MathRenderer
-                                  latex={image.ocrLatex}
-                                  displayMode={true}
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-              <div className="space-y-4">
-                <div className="h-[600px] rounded-lg border">
-                  <ChatPane conversationId={selectedConversationId} />
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <h2 className="text-2xl font-semibold mb-4">Whiteboard</h2>
-              <Whiteboard conversationId={selectedConversationId} />
-            </div>
-          </div>
+        {selectedConversationId && (
+          <TutorHeader
+            currentPath={selectedPath}
+            onSwitchToConversation={handleSwitchToConversation}
+            onSwitchToWhiteboard={handleSwitchToWhiteboard}
+          />
         )}
+        <ProblemPanel
+          conversationId={selectedConversationId}
+          uploadedImages={uploadedImages}
+          onUploadSuccess={handleUploadSuccess}
+          onUploadError={handleUploadError}
+        />
       </SidebarInset>
+      <PathSwitchWarning
+        open={showPathSwitchWarning}
+        onOpenChange={setShowPathSwitchWarning}
+        onConfirm={handleConfirmSwitchToWhiteboard}
+      />
     </ConversationSidebar>
   );
 }

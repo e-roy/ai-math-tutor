@@ -1,0 +1,234 @@
+"use client";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { api } from "@/trpc/react";
+import { MathRenderer } from "@/components/MathRenderer";
+import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+
+interface ResultsModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  conversationId: string;
+  timeOnTaskMs: number;
+  sessionId?: string;
+}
+
+/**
+ * Format milliseconds to MM:SS format
+ */
+function formatTime(ms: number): string {
+  const totalSeconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes.toString().padStart(2, "0")}:${seconds
+    .toString()
+    .padStart(2, "0")}`;
+}
+
+/**
+ * Get mastery badge variant and icon
+ */
+function getMasteryBadgeProps(mastery: "low" | "medium" | "high" | null) {
+  switch (mastery) {
+    case "high":
+      return {
+        variant: "default" as const,
+        className: "bg-green-500 hover:bg-green-600",
+        icon: CheckCircle2,
+        label: "High Mastery",
+      };
+    case "medium":
+      return {
+        variant: "secondary" as const,
+        className: "bg-yellow-500 hover:bg-yellow-600",
+        icon: AlertCircle,
+        label: "Medium Mastery",
+      };
+    case "low":
+      return {
+        variant: "destructive" as const,
+        className: "bg-red-500 hover:bg-red-600",
+        icon: XCircle,
+        label: "Low Mastery",
+      };
+    default:
+      return {
+        variant: "outline" as const,
+        className: "",
+        icon: AlertCircle,
+        label: "No Mastery",
+      };
+  }
+}
+
+/**
+ * ResultsModal component - displays practice session results
+ */
+export function ResultsModal({
+  open,
+  onOpenChange,
+  conversationId,
+  timeOnTaskMs,
+  sessionId,
+}: ResultsModalProps) {
+  // Fetch practice session if sessionId provided
+  const { data: session, isLoading } = api.practice.getSession.useQuery(
+    { sessionId: sessionId! },
+    { enabled: !!sessionId && open },
+  );
+
+  const masteryBadgeProps = session
+    ? getMasteryBadgeProps(session.mastery)
+    : null;
+  const MasteryIcon = masteryBadgeProps?.icon ?? AlertCircle;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle>Practice Session Results</DialogTitle>
+          <DialogDescription>
+            {session
+              ? "Review your practice session performance"
+              : "Practice session results"}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          {isLoading && (
+            <div className="text-muted-foreground text-center text-sm">
+              Loading results...
+            </div>
+          )}
+
+          {!isLoading && session && (
+            <>
+              {/* Score and Mastery */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Score</p>
+                  <div className="text-2xl font-bold">
+                    {session.score !== null
+                      ? `${Math.round(session.score * 100)}%`
+                      : "N/A"}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Mastery Level</p>
+                  {masteryBadgeProps && (
+                    <Badge
+                      variant={masteryBadgeProps.variant}
+                      className={masteryBadgeProps.className}
+                    >
+                      <MasteryIcon className="mr-1 h-3 w-3" />
+                      {masteryBadgeProps.label}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
+              {/* Metrics */}
+              <div className="grid grid-cols-3 gap-4 rounded-lg border bg-muted/50 p-4">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Time</p>
+                  <p className="text-sm font-mono">
+                    {formatTime(session.timeOnTaskMs)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Attempts</p>
+                  <p className="text-sm font-semibold">{session.attempts}</p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">Hints Used</p>
+                  <p className="text-sm font-semibold">{session.hintsUsed}</p>
+                </div>
+              </div>
+
+              {/* Answers Comparison */}
+              {(session.studentAnswer || session.expectedAnswer) && (
+                <div className="space-y-3 rounded-lg border p-4">
+                  <p className="text-sm font-medium">Answer Comparison</p>
+                  {session.expectedAnswer && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        Expected Answer:
+                      </p>
+                      <div className="rounded-md border bg-background p-2">
+                        {session.expectedAnswer.includes("$") ||
+                        session.expectedAnswer.includes("\\(") ||
+                        session.expectedAnswer.includes("\\[") ? (
+                          <MathRenderer
+                            latex={session.expectedAnswer}
+                            displayMode={true}
+                          />
+                        ) : (
+                          <p className="text-sm">{session.expectedAnswer}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {session.studentAnswer && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">
+                        Your Answer:
+                      </p>
+                      <div className="rounded-md border bg-background p-2">
+                        {session.studentAnswer.includes("$") ||
+                        session.studentAnswer.includes("\\(") ||
+                        session.studentAnswer.includes("\\[") ? (
+                          <MathRenderer
+                            latex={session.studentAnswer}
+                            displayMode={true}
+                          />
+                        ) : (
+                          <p className="text-sm">{session.studentAnswer}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Notes/Reason */}
+              {session.notes && (
+                <div className="space-y-1 rounded-lg border bg-muted/50 p-3">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Feedback:
+                  </p>
+                  <p className="text-sm">{session.notes}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {!isLoading && !session && (
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Time on Task:</p>
+                <p className="text-muted-foreground text-sm font-mono">
+                  {formatTime(timeOnTaskMs)}
+                </p>
+              </div>
+              <div className="text-muted-foreground text-sm">
+                Session not saved. Results will be displayed when session is
+                created.
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end">
+          <Button onClick={() => onOpenChange(false)}>Close</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
