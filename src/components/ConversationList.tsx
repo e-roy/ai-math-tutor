@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
 interface ConversationListProps {
@@ -65,7 +66,7 @@ export function ConversationList({
   const allConversations = [
     ...(conversations ?? []),
     ...(allConversationsData ?? []).filter((c) => {
-      const meta = c.meta as Record<string, unknown> | null;
+      const meta = c.meta;
       const path = meta?.path;
       // Include only null/undefined paths (legacy conversations)
       return path === null || path === undefined;
@@ -190,164 +191,166 @@ export function ConversationList({
       </div>
 
       {/* Conversation Lists */}
-      <div className="flex-1 space-y-4 overflow-y-auto">
-        {/* Conversations Section */}
-        <div className="space-y-2">
-          <h3 className="text-muted-foreground px-2 text-xs font-semibold uppercase">
-            Conversations
-          </h3>
-          {isLoading && (
-            <div className="text-muted-foreground py-4 text-center text-sm">
-              Loading...
-            </div>
-          )}
-
-          {!isLoading && allConversations.length === 0 && (
-            <div className="text-muted-foreground px-2 py-4 text-center text-sm">
-              {showArchived
-                ? "No archived conversations"
-                : "No conversations yet"}
-            </div>
-          )}
-
-          {!isLoading &&
-            allConversations.map((conversation) => (
-              <div
-                key={conversation.id}
-                className={cn(
-                  "group hover:bg-accent relative cursor-pointer rounded-lg border p-3 transition-colors",
-                  selectedConversationId === conversation.id &&
-                    "bg-accent border-primary",
-                )}
-                onClick={() => onSelectConversation(conversation.id)}
-              >
-                <div className="space-y-1">
-                  <div className="flex items-start justify-between">
-                    <h3 className="line-clamp-1 pr-8 text-sm font-medium">
-                      {conversation.title ?? "Untitled Conversation"}
-                    </h3>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
-                      onClick={(e) =>
-                        conversation.archived
-                          ? handleUnarchive(conversation.id, e)
-                          : handleArchive(conversation.id, e)
-                      }
-                      title={conversation.archived ? "Unarchive" : "Archive"}
-                    >
-                      {conversation.archived ? (
-                        <ArchiveRestore className="h-4 w-4" />
-                      ) : (
-                        <Archive className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                    <Calendar className="h-3 w-3" />
-                    <span>{formatDate(conversation.createdAt)}</span>
-                    {(conversation.meta as { topic?: string })?.topic && (
-                      <>
-                        <span>•</span>
-                        <span>
-                          {(conversation.meta as { topic?: string }).topic}
-                        </span>
-                      </>
-                    )}
-                    {(conversation.meta as { grade?: string })?.grade && (
-                      <>
-                        <span>•</span>
-                        <span>
-                          {(conversation.meta as { grade?: string }).grade}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-        </div>
-
-        {/* Practice Sessions Section */}
-        <div className="space-y-2">
-          <h3 className="text-muted-foreground px-2 text-xs font-semibold uppercase">
-            Practice Sessions
-          </h3>
-          {isLoading && (
-            <div className="text-muted-foreground py-4 text-center text-sm">
-              Loading...
-            </div>
-          )}
-
-          {!isLoading &&
-            (!practiceSessions || practiceSessions.length === 0) && (
-              <div className="text-muted-foreground px-2 py-4 text-center text-sm">
-                {showArchived
-                  ? "No archived sessions"
-                  : "No practice sessions yet"}
+      <ScrollArea className="flex-1">
+        <div className="space-y-4">
+          {/* Conversations Section */}
+          <div className="space-y-2">
+            <h3 className="text-muted-foreground px-2 text-xs font-semibold uppercase">
+              Conversations
+            </h3>
+            {isLoading && (
+              <div className="text-muted-foreground py-4 text-center text-sm">
+                Loading...
               </div>
             )}
 
-          {!isLoading &&
-            practiceSessions?.map((session) => (
-              <div
-                key={session.id}
-                className={cn(
-                  "group hover:bg-accent relative cursor-pointer rounded-lg border p-3 transition-colors",
-                  selectedConversationId === session.id &&
-                    "bg-accent border-primary",
-                )}
-                onClick={() => onSelectConversation(session.id)}
-              >
-                <div className="space-y-1">
-                  <div className="flex items-start justify-between">
-                    <h3 className="line-clamp-1 pr-8 text-sm font-medium">
-                      {session.title ?? formatDate(session.createdAt)}
-                    </h3>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
-                      onClick={(e) =>
-                        session.archived
-                          ? handleUnarchive(session.id, e)
-                          : handleArchive(session.id, e)
-                      }
-                      title={session.archived ? "Unarchive" : "Archive"}
-                    >
-                      {session.archived ? (
-                        <ArchiveRestore className="h-4 w-4" />
-                      ) : (
-                        <Archive className="h-4 w-4" />
+            {!isLoading && allConversations.length === 0 && (
+              <div className="text-muted-foreground px-2 py-4 text-center text-sm">
+                {showArchived
+                  ? "No archived conversations"
+                  : "No conversations yet"}
+              </div>
+            )}
+
+            {!isLoading &&
+              allConversations.map((conversation) => (
+                <div
+                  key={conversation.id}
+                  className={cn(
+                    "group hover:bg-accent relative cursor-pointer rounded-lg border p-3 transition-colors",
+                    selectedConversationId === conversation.id &&
+                      "bg-accent border-primary",
+                  )}
+                  onClick={() => onSelectConversation(conversation.id)}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-start justify-between">
+                      <h3 className="line-clamp-1 pr-8 text-sm font-medium">
+                        {conversation.title ?? "Untitled Conversation"}
+                      </h3>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+                        onClick={(e) =>
+                          conversation.archived
+                            ? handleUnarchive(conversation.id, e)
+                            : handleArchive(conversation.id, e)
+                        }
+                        title={conversation.archived ? "Unarchive" : "Archive"}
+                      >
+                        {conversation.archived ? (
+                          <ArchiveRestore className="h-4 w-4" />
+                        ) : (
+                          <Archive className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                      <Calendar className="h-3 w-3" />
+                      <span>{formatDate(conversation.createdAt)}</span>
+                      {(conversation.meta as { topic?: string })?.topic && (
+                        <>
+                          <span>•</span>
+                          <span>
+                            {(conversation.meta as { topic?: string }).topic}
+                          </span>
+                        </>
                       )}
-                    </Button>
-                  </div>
-                  <div className="text-muted-foreground flex items-center gap-2 text-xs">
-                    <Calendar className="h-3 w-3" />
-                    <span>{formatDate(session.createdAt)}</span>
-                    {(session.meta as { topic?: string })?.topic && (
-                      <>
-                        <span>•</span>
-                        <span>
-                          {(session.meta as { topic?: string }).topic}
-                        </span>
-                      </>
-                    )}
-                    {(session.meta as { grade?: string })?.grade && (
-                      <>
-                        <span>•</span>
-                        <span>
-                          {(session.meta as { grade?: string }).grade}
-                        </span>
-                      </>
-                    )}
+                      {(conversation.meta as { grade?: string })?.grade && (
+                        <>
+                          <span>•</span>
+                          <span>
+                            {(conversation.meta as { grade?: string }).grade}
+                          </span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
+              ))}
+          </div>
+
+          {/* Practice Sessions Section */}
+          <div className="space-y-2">
+            <h3 className="text-muted-foreground px-2 text-xs font-semibold uppercase">
+              Practice Sessions
+            </h3>
+            {isLoading && (
+              <div className="text-muted-foreground py-4 text-center text-sm">
+                Loading...
               </div>
-            ))}
+            )}
+
+            {!isLoading &&
+              (!practiceSessions || practiceSessions.length === 0) && (
+                <div className="text-muted-foreground px-2 py-4 text-center text-sm">
+                  {showArchived
+                    ? "No archived sessions"
+                    : "No practice sessions yet"}
+                </div>
+              )}
+
+            {!isLoading &&
+              practiceSessions?.map((session) => (
+                <div
+                  key={session.id}
+                  className={cn(
+                    "group hover:bg-accent relative cursor-pointer rounded-lg border p-3 transition-colors",
+                    selectedConversationId === session.id &&
+                      "bg-accent border-primary",
+                  )}
+                  onClick={() => onSelectConversation(session.id)}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-start justify-between">
+                      <h3 className="line-clamp-1 pr-8 text-sm font-medium">
+                        {session.title ?? formatDate(session.createdAt)}
+                      </h3>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
+                        onClick={(e) =>
+                          session.archived
+                            ? handleUnarchive(session.id, e)
+                            : handleArchive(session.id, e)
+                        }
+                        title={session.archived ? "Unarchive" : "Archive"}
+                      >
+                        {session.archived ? (
+                          <ArchiveRestore className="h-4 w-4" />
+                        ) : (
+                          <Archive className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                      <Calendar className="h-3 w-3" />
+                      <span>{formatDate(session.createdAt)}</span>
+                      {(session.meta as { topic?: string })?.topic && (
+                        <>
+                          <span>•</span>
+                          <span>
+                            {(session.meta as { topic?: string }).topic}
+                          </span>
+                        </>
+                      )}
+                      {(session.meta as { grade?: string })?.grade && (
+                        <>
+                          <span>•</span>
+                          <span>
+                            {(session.meta as { grade?: string }).grade}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }

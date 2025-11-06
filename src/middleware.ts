@@ -6,8 +6,18 @@ export async function middleware(request: NextRequest) {
   const session = await auth();
   const { pathname } = request.nextUrl;
 
-  // Protect /tutor and /progress routes
-  if (pathname.startsWith("/tutor") || pathname.startsWith("/progress")) {
+  // Create response
+  const response = NextResponse.next();
+
+  // Set pathname header for server components to read
+  response.headers.set("x-pathname", pathname);
+
+  // Protect /app, /tutor and /progress routes
+  if (
+    pathname.startsWith("/app") ||
+    pathname.startsWith("/tutor") ||
+    pathname.startsWith("/progress")
+  ) {
     if (!session) {
       const signInUrl = new URL("/signin", request.url);
       signInUrl.searchParams.set("callbackUrl", pathname);
@@ -15,10 +25,19 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
-  matcher: ["/tutor/:path*", "/progress/:path*"],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     */
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+  ],
 };
 

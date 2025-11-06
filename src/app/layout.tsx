@@ -5,7 +5,7 @@ import { Geist } from "next/font/google";
 
 import { TRPCReactProvider } from "@/trpc/react";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { NavBar } from "@/components/NavBar";
+import { ConditionalHeader } from "@/components/ConditionalHeader";
 
 export const metadata: Metadata = {
   title: "AI Math Tutor",
@@ -26,7 +26,7 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <TRPCReactProvider>
-            <NavBar />
+            <ConditionalHeader />
             {children}
           </TRPCReactProvider>
         </ThemeProvider>

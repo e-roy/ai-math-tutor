@@ -15,16 +15,16 @@ export function NavBarClient({ session }: NavBarClientProps) {
   const pathname = usePathname();
 
   const navItems = [
-    { href: "/", label: "Home", icon: Home },
+    { href: "/app", label: "Home", icon: Home },
     { href: "/tutor", label: "Tutor", icon: BookOpen },
     { href: "/progress", label: "Progress", icon: TrendingUp },
   ];
 
   return (
-    <nav className="border-b bg-background">
+    <nav className="bg-background border-b">
       <div className="container flex h-16 items-center justify-between px-4">
         <div className="flex items-center gap-6">
-          <Link href="/" className="text-lg font-semibold">
+          <Link href="/app" className="text-lg font-semibold">
             AI Math Tutor
           </Link>
           <div className="flex items-center gap-1">
@@ -50,18 +50,18 @@ export function NavBarClient({ session }: NavBarClientProps) {
         <div className="flex items-center gap-4">
           {session ? (
             <>
-              <span className="text-sm text-muted-foreground">
-                {session.user?.name || session.user?.email}
+              <span className="text-muted-foreground text-sm">
+                {session.user?.name ?? session.user?.email}
               </span>
               <form action={signOutAction}>
                 <Button type="submit" variant="outline" size="sm">
-                  Sign out
+                  Sign Out
                 </Button>
               </form>
             </>
           ) : (
             <Button asChild variant="default" size="sm">
-              <Link href="/signin">Sign in</Link>
+              <Link href="/signin">Sign In</Link>
             </Button>
           )}
         </div>
@@ -69,4 +69,3 @@ export function NavBarClient({ session }: NavBarClientProps) {
     </nav>
   );
 }
-

@@ -11,9 +11,9 @@ export default async function SignInPage({
   const session = await auth();
   const params = await searchParams;
 
-  // If already signed in, redirect to callback URL or home
+  // If already signed in, redirect to callback URL or app dashboard
   if (session) {
-    redirect(params.callbackUrl ?? "/");
+    redirect(params.callbackUrl ?? "/app");
   }
 
   // Check if Google OAuth is configured
@@ -46,7 +46,7 @@ export default async function SignInPage({
           action={async () => {
             "use server";
             await signIn("google", {
-              redirectTo: params.callbackUrl ?? "/",
+              redirectTo: params.callbackUrl ?? "/app",
             });
           }}
           className="flex w-full max-w-md flex-col gap-4"

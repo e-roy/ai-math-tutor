@@ -9,5 +9,6 @@ export default async function TutorPage() {
     redirect("/signin?callbackUrl=/tutor");
   }
 
-  return <TutorClient />;
+  return <TutorClient session={session} />;
 }
+

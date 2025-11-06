@@ -7,14 +7,20 @@ import { ProblemPanel } from "@/components/ProblemPanel";
 import { WhiteboardPanel } from "@/components/WhiteboardPanel";
 import { ConversationSidebar } from "@/components/ConversationSidebar";
 import { TutorHeader } from "@/components/TutorHeader";
+import { NavBarClient } from "@/components/NavBarClient";
 import { PathSwitchWarning } from "@/components/PathSwitchWarning";
 import { PathChooser } from "@/components/PathChooser";
-import { SidebarInset } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useChatStore } from "@/store/useChatStore";
 import type { UploadedImage } from "@/types/files";
 import { getConversationPath, type TutorPath } from "@/types/conversation";
+import type { Session } from "next-auth";
 
-export function TutorClient() {
+interface TutorClientProps {
+  session: Session | null;
+}
+
+export function TutorClient({ session }: TutorClientProps) {
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
@@ -67,7 +73,7 @@ export function TutorClient() {
   // Update path when conversation data is loaded
   useEffect(() => {
     if (conversationData) {
-      const meta = conversationData.meta as Record<string, unknown> | null;
+      const meta = conversationData.meta;
       const path = getConversationPath(meta);
       setSelectedPath(path);
     } else {
@@ -218,7 +224,19 @@ export function TutorClient() {
   if (selectedPath === "whiteboard" && selectedConversationId) {
     return (
       <>
-        <WhiteboardPanel conversationId={selectedConversationId} />
+        <SidebarProvider
+          style={
+            {
+              "--sidebar-width": "calc(var(--spacing) * 72)",
+              "--header-height": "calc(var(--spacing) * 12)",
+            } as React.CSSProperties
+          }
+        >
+          <SidebarInset>
+            <NavBarClient session={session} />
+            <WhiteboardPanel conversationId={selectedConversationId} />
+          </SidebarInset>
+        </SidebarProvider>
         <PathSwitchWarning
           open={showPathSwitchWarning}
           onOpenChange={setShowPathSwitchWarning}
@@ -234,31 +252,49 @@ export function TutorClient() {
   }
 
   return (
-    <ConversationSidebar
-      selectedConversationId={selectedConversationId}
-      onSelectConversation={handleSelectConversation}
-      onNewConversation={handleNewConversation}
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "calc(var(--spacing) * 72)",
+          "--header-height": "calc(var(--spacing) * 12)",
+        } as React.CSSProperties
+      }
     >
+      <ConversationSidebar
+        selectedConversationId={selectedConversationId}
+        onSelectConversation={handleSelectConversation}
+        onNewConversation={handleNewConversation}
+        variant="inset"
+      />
       <SidebarInset>
-        {selectedConversationId && (
-          <TutorHeader
-            currentPath={selectedPath}
-            onSwitchToConversation={handleSwitchToConversation}
-            onSwitchToWhiteboard={handleSwitchToWhiteboard}
-          />
-        )}
-        <ProblemPanel
-          conversationId={selectedConversationId}
-          uploadedImages={uploadedImages}
-          onUploadSuccess={handleUploadSuccess}
-          onUploadError={handleUploadError}
-        />
+        <div className="flex flex-1 flex-col">
+          <NavBarClient session={session} />
+          <div className="@container/main flex flex-1 flex-col gap-2">
+            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+              {selectedConversationId && (
+                <TutorHeader
+                  currentPath={selectedPath}
+                  onSwitchToConversation={handleSwitchToConversation}
+                  onSwitchToWhiteboard={handleSwitchToWhiteboard}
+                />
+              )}
+              <ProblemPanel
+                conversationId={selectedConversationId}
+                uploadedImages={uploadedImages}
+                onUploadSuccess={handleUploadSuccess}
+                onUploadError={handleUploadError}
+              />
+            </div>
+          </div>
+        </div>
       </SidebarInset>
+
       <PathSwitchWarning
         open={showPathSwitchWarning}
         onOpenChange={setShowPathSwitchWarning}
         onConfirm={handleConfirmSwitchToWhiteboard}
       />
-    </ConversationSidebar>
+    </SidebarProvider>
   );
 }
+
