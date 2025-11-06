@@ -53,30 +53,66 @@ tailwindcss class-variance-authority clsx
 ```
 /src
   /app
+    /(app)           # main app route group
+      /app           # app landing/page
+      /tutor         # main tutoring UI (chat + whiteboard)
+      /progress      # mastery overview & skill detail
+      layout.tsx
     /(auth)          # sign-in/out routes
+      /signin
+    /_components     # private app components
+    /actions         # server actions
+      auth.ts
     /api
       /auth/[...nextauth]/route.ts  # Next.js auth route handler
       /trpc/[trpc]/route.ts         # tRPC Next handler
-    /tutor           # main tutoring UI (chat + whiteboard)
-    /progress        # mastery overview & skill detail
     layout.tsx
     page.tsx
   /components
     /ui              # shadcn/ui component library
     ChatPane.tsx
-    TutorSidebar.tsx
+    ConversationList.tsx
+    ConversationSidebar.tsx
+    ConditionalHeader.tsx
+    EphemeralChatPane.tsx
+    LandingHeader.tsx
+    MathAnswerBox.tsx
     MathRenderer.tsx       # KaTeX wrapper
+    MathText.tsx
+    MessageBubble.tsx
+    NavBar.tsx
+    NavBarClient.tsx
+    PathChooser.tsx
+    PathSwitch.tsx
+    PathSwitchWarning.tsx
+    ProblemHeader.tsx
+    ProblemPanel.tsx
+    ResultsModal.tsx
+    ThemeProvider.tsx
+    TutorHeader.tsx
     UploadDropzone.tsx
     Whiteboard.tsx         # Excalidraw embed
+    WhiteboardPanel.tsx
   /hooks
     use-mobile.ts    # React hooks
   /lib
     env.ts                 # @t3-oss/env-nextjs
     utils.ts               # utility functions (cn helper, etc.)
-    db.ts                  # Neon + Drizzle client
-    ai/                    # prompts, guardrails, classifiers
-    math/                  # mathjs helpers, equivalence check
-    whiteboard/            # scene adapters, ai-draw helpers
+    /ai                    # prompts, guardrails, classifiers
+      prompts.ts
+      tools.ts
+    /conversations         # conversation helpers
+      title-generator.ts
+    /grading               # grading/equivalence helpers
+      equivalence.ts
+    /math                  # mathjs helpers, equivalence check, rendering
+      equivalence.ts
+      llm-validate.ts
+      render.ts
+    /whiteboard            # scene adapters, ai-draw helpers
+      ai-draw-helpers.ts
+      scene-adapters.ts
+  /middleware.ts           # Next.js middleware
   /server
     /auth
       config.ts            # next-auth configuration
@@ -88,20 +124,24 @@ tailwindcss class-variance-authority clsx
       boards.ts            # board operations
       conversations.ts     # conversation operations
       files.ts             # file operations
+      practice.ts          # practice operations
       progress.ts          # progress/mastery operations
+      turns.ts             # turn operations
       utils.ts             # DB utilities
     /api
       trpc.ts              # tRPC configuration/setup
       root.ts              # mergeRouters
       /routers
         ai.ts              # tutorTurn (LLM stream)
-        ocr.ts             # parseImage (Vision)
         board.ts           # get/save/snapshot
+        conversations.ts   # conversation CRUD
         files.ts           # blob upload finalize
+        ocr.ts             # parseImage (Vision)
+        practice.ts        # practice problems
         progress.ts        # updateMastery/getOverview
   /store
     useChatStore.ts
-    useSessionStore.ts
+    useUIPrefsStore.ts
   /styles
     globals.css
   /trpc
@@ -111,6 +151,10 @@ tailwindcss class-variance-authority clsx
   /types
     ai.ts                  # shared types for tool outputs
     board.ts               # Excalidraw scene types
+    conversation.ts        # conversation types
+    files.ts               # file types
+    practice.ts            # practice types
+    progress.ts            # progress types
 ```
 
 ## tRPC Surface (signatures)

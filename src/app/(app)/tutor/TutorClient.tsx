@@ -11,7 +11,17 @@ import { NavBarClient } from "@/components/NavBarClient";
 import { PathSwitchWarning } from "@/components/PathSwitchWarning";
 import { PathChooser } from "@/components/PathChooser";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { useChatStore } from "@/store/useChatStore";
+import { useChildStore } from "@/store/useChildStore";
+import Link from "next/link";
 import type { UploadedImage } from "@/types/files";
 import { getConversationPath, type TutorPath } from "@/types/conversation";
 import type { Session } from "next-auth";
@@ -21,13 +31,13 @@ interface TutorClientProps {
 }
 
 export function TutorClient({ session }: TutorClientProps) {
+  const currentChildId = useChildStore((state) => state.currentChildId);
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [selectedConversationId, setSelectedConversationId] = useState<
     string | null
   >(null);
   const [selectedPath, setSelectedPath] = useState<TutorPath | null>(null);
   const [showPathSwitchWarning, setShowPathSwitchWarning] = useState(false);
-  const [showPathChooser, setShowPathChooser] = useState(true); // Show on initial load
 
   const parseImage = api.ocr.parseImage.useMutation();
   const createConversation = api.conversations.create.useMutation({
@@ -57,6 +67,16 @@ export function TutorClient({ session }: TutorClientProps) {
     const state = useChatStore.getState();
     (state.clearTurns as () => void)();
   };
+
+  // Fetch tutor persona when child is selected
+  const {
+    data: tutorPersona,
+    isLoading: isTutorPersonaLoading,
+    isError: isTutorPersonaError,
+  } = api.children.getTutor.useQuery(
+    { childId: currentChildId! },
+    { enabled: !!currentChildId },
+  );
 
   // Load conversation data to get path
   const { data: conversationData } = api.conversations.getById.useQuery(
@@ -140,8 +160,6 @@ export function TutorClient({ session }: TutorClientProps) {
   };
 
   const handleSelectPath = (path: TutorPath) => {
-    // Close modal immediately before starting mutation
-    setShowPathChooser(false);
     // Create conversation with selected path
     createConversation.mutate({ path });
   };
@@ -194,18 +212,43 @@ export function TutorClient({ session }: TutorClientProps) {
     // TODO: Show toast notification
   };
 
+  // Show loading state while checking if child data is available
+  if (currentChildId && isTutorPersonaLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="space-y-4 text-center">
+          <h2 className="text-2xl font-semibold">Loading...</h2>
+          <p className="text-muted-foreground">Please wait</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If no child is selected, or child data is not available, show prompt to select a child
+  if (!currentChildId || isTutorPersonaError || !tutorPersona) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Select a Child</CardTitle>
+            <CardDescription>
+              Please select a child to start tutoring
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild className="w-full">
+              <Link href="/app">Go to Dashboard</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // If no conversation selected, show only PathChooser (no sidebar, no content)
   // Don't show if we're currently creating a conversation
   if (!selectedConversationId && !createConversation.isPending) {
-    return (
-      <>
-        <PathChooser
-          open={showPathChooser}
-          onOpenChange={setShowPathChooser}
-          onSelectPath={handleSelectPath}
-        />
-      </>
-    );
+    return <PathChooser onSelectPath={handleSelectPath} />;
   }
 
   // Show loading state while creating conversation
@@ -276,6 +319,7 @@ export function TutorClient({ session }: TutorClientProps) {
                   currentPath={selectedPath}
                   onSwitchToConversation={handleSwitchToConversation}
                   onSwitchToWhiteboard={handleSwitchToWhiteboard}
+                  tutorPersona={tutorPersona}
                 />
               )}
               <ProblemPanel
@@ -297,4 +341,3 @@ export function TutorClient({ session }: TutorClientProps) {
     </SidebarProvider>
   );
 }
-

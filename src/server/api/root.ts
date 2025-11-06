@@ -5,6 +5,7 @@ import {
 } from "@/server/api/trpc";
 import { aiRouter } from "@/server/api/routers/ai";
 import { boardRouter } from "@/server/api/routers/board";
+import { childrenRouter } from "@/server/api/routers/children";
 import { conversationsRouter } from "@/server/api/routers/conversations";
 import { filesRouter } from "@/server/api/routers/files";
 import { ocrRouter } from "@/server/api/routers/ocr";
@@ -25,6 +26,7 @@ export const appRouter = createTRPCRouter({
   practice: practiceRouter,
   files: filesRouter,
   conversations: conversationsRouter,
+  children: childrenRouter,
 });
 
 // export type definition of API
