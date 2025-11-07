@@ -1,20 +1,22 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect } from "react";
 import type { Turn } from "@/server/db/turns";
 import type { TurnType } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/MessageBubble";
-import { MathAnswerBox } from "@/components/MathAnswerBox";
 import { api } from "@/trpc/react";
 import { Send } from "lucide-react";
 
 interface EphemeralChatPaneProps {
   conversationId: string;
+  problemText?: string;
+  isPracticeActive?: boolean;
   onHintUsed?: () => void;
   onAttempt?: () => void;
   onTurnsChange?: (turns: Turn[]) => void;
+  triggerMessage?: string | null;
 }
 
 /**
@@ -23,9 +25,12 @@ interface EphemeralChatPaneProps {
  */
 export function EphemeralChatPane({
   conversationId,
+  problemText,
+  isPracticeActive,
   onHintUsed,
   onAttempt,
   onTurnsChange,
+  triggerMessage,
 }: EphemeralChatPaneProps) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [input, setInput] = useState("");
@@ -35,6 +40,7 @@ export function EphemeralChatPane({
     null,
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastTriggerMessageRef = useRef<string | null>(null);
 
   // Clear turns when conversationId changes or component unmounts
   useEffect(() => {
@@ -59,7 +65,92 @@ export function EphemeralChatPane({
     userText?: string;
     userLatex?: string;
     ephemeral: boolean;
+    problemText?: string;
+    conversationHistory?: Array<{
+      role: "user" | "assistant";
+      text: string | null;
+      latex: string | null;
+    }>;
   } | null>(null);
+
+  // Auto-send problem text to AI when practice starts
+  useEffect(() => {
+    if (
+      isPracticeActive &&
+      problemText?.trim() &&
+      turns.length === 0 &&
+      !isStreaming &&
+      !subscriptionEnabled
+    ) {
+      // Start streaming
+      setIsStreaming(true);
+      setStreamingText("");
+      setStreamingTurnType(null);
+
+      // Trigger subscription with problemText directly
+      // This will cause the AI to start the conversation without showing a user message
+      setSubscriptionInput({
+        conversationId,
+        problemText: problemText.trim(),
+        ephemeral: true,
+        conversationHistory: [], // First message, no history yet
+      });
+      setSubscriptionEnabled(true);
+    }
+  }, [
+    isPracticeActive,
+    problemText,
+    turns.length,
+    isStreaming,
+    subscriptionEnabled,
+    conversationId,
+  ]);
+
+  // Handle triggerMessage from parent (e.g., whiteboard submit)
+  useEffect(() => {
+    if (
+      triggerMessage?.trim() &&
+      triggerMessage !== lastTriggerMessageRef.current &&
+      !isStreaming &&
+      conversationId
+    ) {
+      // Mark this message as processed
+      lastTriggerMessageRef.current = triggerMessage;
+
+      // Create user turn immediately (optimistic update, ephemeral)
+      const userTurn: Turn = {
+        id: crypto.randomUUID(),
+        conversationId,
+        role: "user",
+        text: triggerMessage.trim(),
+        latex: null,
+        tool: null,
+        createdAt: new Date(),
+      };
+      const newTurns = [...turns, userTurn];
+      setTurns(newTurns);
+      onTurnsChange?.(newTurns);
+
+      // Start streaming
+      setIsStreaming(true);
+      setStreamingText("");
+      setStreamingTurnType(null);
+
+      // Trigger subscription with ephemeral flag and conversation history
+      const historyWithoutCurrent = turns.map((turn) => ({
+        role: turn.role,
+        text: turn.text,
+        latex: turn.latex,
+      }));
+      setSubscriptionInput({
+        conversationId,
+        userText: triggerMessage.trim(),
+        ephemeral: true,
+        conversationHistory: historyWithoutCurrent,
+      });
+      setSubscriptionEnabled(true);
+    }
+  }, [triggerMessage, isStreaming, conversationId, turns, onTurnsChange]);
 
   // Set up subscription with ephemeral flag
   api.ai.tutorTurn.useSubscription(
@@ -118,34 +209,6 @@ export function EphemeralChatPane({
     },
   );
 
-  // Detect if tutor is asking for a math answer
-  const isAskingForMathAnswer = useMemo(() => {
-    if (turns.length === 0 || isStreaming) return false;
-
-    const lastTurn = turns[turns.length - 1];
-    if (!lastTurn) return false;
-    if (lastTurn.role !== "assistant" || !lastTurn.text) return false;
-
-    const text = lastTurn.text.toLowerCase();
-    const mathKeywords = [
-      "what is",
-      "solve",
-      "find",
-      "calculate",
-      "answer",
-      "value",
-      "equals",
-      "=",
-    ];
-    const questionKeywords = ["?", "what", "how"];
-
-    return (
-      mathKeywords.some((keyword) => text.includes(keyword)) &&
-      (questionKeywords.some((keyword) => text.includes(keyword)) ||
-        text.includes("="))
-    );
-  }, [turns, isStreaming]);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !conversationId || isStreaming) return;
@@ -177,48 +240,18 @@ export function EphemeralChatPane({
     setStreamingText("");
     setStreamingTurnType(null);
 
-    // Trigger subscription with ephemeral flag
+    // Trigger subscription with ephemeral flag and conversation history
+    // Exclude the current turn since it will be added by the server
+    const historyWithoutCurrent = turns.map((turn) => ({
+      role: turn.role,
+      text: turn.text,
+      latex: turn.latex,
+    }));
     setSubscriptionInput({
       conversationId,
       userText,
       ephemeral: true,
-    });
-    setSubscriptionEnabled(true);
-  };
-
-  const handleMathAnswerSubmit = async (answer: string, latex?: string) => {
-    if (!conversationId || isStreaming) return;
-
-    // Track attempt
-    if (onAttempt) {
-      onAttempt();
-    }
-
-    // Create user turn immediately (optimistic update, ephemeral)
-    const userTurn: Turn = {
-      id: crypto.randomUUID(), // Temporary ID
-      conversationId,
-      role: "user",
-      text: answer,
-      latex: latex ?? null,
-      tool: null,
-      createdAt: new Date(),
-    };
-    const newTurns = [...turns, userTurn];
-    setTurns(newTurns);
-    onTurnsChange?.(newTurns);
-
-    // Start streaming
-    setIsStreaming(true);
-    setStreamingText("");
-    setStreamingTurnType(null);
-
-    // Trigger subscription with ephemeral flag
-    setSubscriptionInput({
-      conversationId,
-      userText: answer,
-      userLatex: latex,
-      ephemeral: true,
+      conversationHistory: historyWithoutCurrent,
     });
     setSubscriptionEnabled(true);
   };
@@ -264,17 +297,6 @@ export function EphemeralChatPane({
         <div ref={messagesEndRef} />
       </div>
       <div className="space-y-2 border-t p-4">
-        {isAskingForMathAnswer && (
-          <div className="pb-2">
-            <p className="text-muted-foreground mb-2 text-sm">
-              Enter your math answer:
-            </p>
-            <MathAnswerBox
-              onSubmit={handleMathAnswerSubmit}
-              disabled={isStreaming}
-            />
-          </div>
-        )}
         <form onSubmit={handleSubmit}>
           <div className="flex gap-2">
             <Textarea

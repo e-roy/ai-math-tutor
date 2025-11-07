@@ -3,7 +3,9 @@ import { eq, sql } from "drizzle-orm";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { boards, boardSnapshots } from "@/server/db/schema";
-import { sceneToDbFormat } from "@/lib/whiteboard/scene-adapters";
+import { sceneToDbFormat, dbFormatToScene } from "@/lib/whiteboard/scene-adapters";
+import { extractAnswerFromScene } from "@/lib/whiteboard/text-extraction";
+import type { ExcalidrawScene } from "@/types/board";
 
 export const boardRouter = createTRPCRouter({
   get: protectedProcedure
@@ -192,6 +194,139 @@ export const boardRouter = createTRPCRouter({
         boardId: updated.id,
         version: updated.version,
       };
+    }),
+
+  checkWhiteboardAnswer: protectedProcedure
+    .input(
+      z.object({
+        conversationId: z.string().uuid(),
+        problemText: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      // Get current board scene
+      const [board] = await ctx.db
+        .select()
+        .from(boards)
+        .where(eq(boards.conversationId, input.conversationId))
+        .limit(1);
+
+      if (!board || !board.scene) {
+        return {
+          isCorrect: false,
+          extractedAnswer: null,
+          error: "No board content found",
+        };
+      }
+
+      // Convert board scene to ExcalidrawScene format
+      const scene = dbFormatToScene(board.scene) as ExcalidrawScene;
+
+      // Extract answer from whiteboard
+      const extractedAnswer = extractAnswerFromScene(scene);
+
+      if (!extractedAnswer) {
+        return {
+          isCorrect: false,
+          extractedAnswer: null,
+          error: "No answer found on whiteboard",
+        };
+      }
+
+      // Use the same logic as checkAnswer tool to verify correctness
+      try {
+        const { evaluate } = await import("mathjs");
+
+        // Extract the math expression from problem text
+        let problemExpression = input.problemText.trim();
+        problemExpression = problemExpression
+          .replace(
+            /^(what is|what's|solve|calculate|compute|find|evaluate)\s*:?\s*/i,
+            "",
+          )
+          .replace(/[?.,!]+$/, "")
+          .trim();
+
+        // Solve the problem
+        let solvedAnswer: number;
+        try {
+          const solved: unknown = evaluate(problemExpression);
+          if (typeof solved === "number" && !isNaN(solved) && isFinite(solved)) {
+            solvedAnswer = solved;
+          } else {
+            return {
+              isCorrect: false,
+              extractedAnswer,
+              error: "Problem expression did not evaluate to a valid number",
+            };
+          }
+        } catch (error) {
+          return {
+            isCorrect: false,
+            extractedAnswer,
+            error:
+              error instanceof Error
+                ? `Failed to solve problem: ${error.message}`
+                : "Failed to solve problem",
+          };
+        }
+
+        // Evaluate student answer from whiteboard
+        let studentAnswerValue: number;
+        try {
+          let studentExpr = extractedAnswer.trim();
+          studentExpr = studentExpr
+            .replace(
+              /^(the answer is|answer is|answer|it's|it is|i got|i have|equals?|is)\s*:?\s*/i,
+              "",
+            )
+            .replace(/[?.,!]+$/, "")
+            .trim();
+
+          const studentEval: unknown = evaluate(studentExpr);
+          if (
+            typeof studentEval === "number" &&
+            !isNaN(studentEval) &&
+            isFinite(studentEval)
+          ) {
+            studentAnswerValue = studentEval;
+          } else {
+            return {
+              isCorrect: false,
+              extractedAnswer,
+              solvedAnswer,
+              error: "Student answer did not evaluate to a valid number",
+            };
+          }
+        } catch (error) {
+          return {
+            isCorrect: false,
+            extractedAnswer,
+            solvedAnswer,
+            error:
+              error instanceof Error
+                ? `Failed to evaluate student answer: ${error.message}`
+                : "Failed to evaluate student answer",
+          };
+        }
+
+        // Compare answers (allow small floating point differences)
+        const tolerance = 1e-10;
+        const isCorrect = Math.abs(solvedAnswer - studentAnswerValue) < tolerance;
+
+        return {
+          isCorrect,
+          extractedAnswer,
+          solvedAnswer,
+        };
+      } catch (error) {
+        return {
+          isCorrect: false,
+          extractedAnswer,
+          error:
+            error instanceof Error ? error.message : "Unknown error occurred",
+        };
+      }
     }),
 });
 

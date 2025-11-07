@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
-import { streamText } from "ai";
+import { streamText, stepCountIs } from "ai";
 import { openai } from "@ai-sdk/openai";
 import { TRPCError } from "@trpc/server";
 
@@ -11,9 +11,13 @@ import { SOCRATIC_SYSTEM_PROMPT } from "@/lib/ai/prompts";
 import {
   classifyTurnTool,
   boardAnnotationTool,
+  checkAnswerTool,
+  evaluateTool,
   classifyTurnSchema,
   boardAnnotationSchema,
+  checkAnswerSchema,
 } from "@/lib/ai/tools";
+import { calculatorTools } from "@/lib/ai/math-tools";
 import type { TurnClassifierResult } from "@/types/ai";
 import { generateTitleFromProblem } from "@/lib/conversations/title-generator";
 import {
@@ -66,6 +70,16 @@ export const aiRouter = createTRPCRouter({
         userLatex: z.string().optional(),
         fileId: z.string().uuid().optional(),
         ephemeral: z.boolean().optional(),
+        problemText: z.string().optional(),
+        conversationHistory: z
+          .array(
+            z.object({
+              role: z.enum(["user", "assistant"]),
+              text: z.string().optional().nullable(),
+              latex: z.string().optional().nullable(),
+            }),
+          )
+          .optional(),
       }),
     )
     .subscription(async function* ({ input, ctx }) {
@@ -99,8 +113,13 @@ export const aiRouter = createTRPCRouter({
         input.conversationId,
       );
 
-      // Persist user turn if provided (skip if ephemeral)
-      if ((input.userText || input.userLatex) && !isEphemeral) {
+      // Persist user turn if provided (skip if ephemeral or if problemText is provided directly)
+      // When problemText is provided directly, we don't want to persist the initial user message
+      if (
+        (input.userText || input.userLatex) &&
+        !isEphemeral &&
+        !input.problemText
+      ) {
         await createTurn(ctx.db, {
           conversationId: input.conversationId,
           role: "user",
@@ -128,38 +147,104 @@ export const aiRouter = createTRPCRouter({
         }
       }
 
+      // Generate title from problemText if provided directly and conversation has no title
+      if (
+        input.problemText &&
+        !conversation.title &&
+        previousTurns.length === 0
+      ) {
+        try {
+          const generatedTitle = generateTitleFromProblem(input.problemText);
+          await ctx.db
+            .update(conversations)
+            .set({ title: generatedTitle })
+            .where(eq(conversations.id, input.conversationId));
+        } catch (error) {
+          // Non-fatal: title generation failed
+          console.error(
+            "Failed to update conversation title from problemText:",
+            error,
+          );
+        }
+      }
+
+      // Extract problem text from conversation
+      // problemText is provided directly as a parameter
+      const problemText: string | null = input.problemText ?? null;
+
       // Build conversation history from turns
+      let systemPrompt = SOCRATIC_SYSTEM_PROMPT;
+      if (problemText) {
+        // Add problem text context to system prompt
+        // The AI should ask "What is {equation}?" as the first question
+        // and use checkAnswer tool to verify student answers
+        const isFirstMessage =
+          (isEphemeral && input.conversationHistory?.length === 0) ||
+          (!isEphemeral && previousTurns.length === 0);
+
+        if (isFirstMessage) {
+          systemPrompt += `\n\n[Internal context: The student is starting a new problem. The problem/equation is: "${problemText}". Your FIRST message must be: "What is ${problemText}?"]`;
+        } else {
+          systemPrompt += `\n\n[Internal context: The student is working on this problem: "${problemText}". When the student provides an answer (from chat or whiteboard), you MUST use the checkAnswer tool with studentAnswer=(their answer) and problemText="${problemText}" to verify correctness. The checkAnswer tool will return isCorrect (true/false) and solvedAnswer (the correct answer). 
+
+For chat answers: Use "That isn't correct, can you try again?" for wrong answers, or "Correct! Can you write {solvedAnswer} on the board?" for correct answers.
+
+For whiteboard submissions (after asking them to write on board): Use "Can you try again?" for wrong answers, or "Very good!" for correct answers.]`;
+        }
+      }
+
       const messages: Array<{
         role: "user" | "assistant" | "system";
         content: string;
       }> = [
         {
           role: "system",
-          content: SOCRATIC_SYSTEM_PROMPT,
+          content: systemPrompt,
         },
       ];
 
-      // Add previous turns to history
-      for (const turn of previousTurns) {
-        if (turn.text) {
-          messages.push({
-            role: turn.role,
-            content: turn.text,
-          });
+      // For ephemeral mode, use provided conversation history if available
+      // Otherwise, fall back to database turns
+      if (isEphemeral && input.conversationHistory) {
+        // Use client-provided history for ephemeral conversations
+        for (const turn of input.conversationHistory) {
+          const content = turn.latex
+            ? `Solve: ${turn.latex}`
+            : (turn.text ?? "");
+          if (content) {
+            messages.push({
+              role: turn.role,
+              content,
+            });
+          }
+        }
+      } else {
+        // Use database turns for non-ephemeral or when history not provided
+        for (const turn of previousTurns) {
+          if (turn.text) {
+            messages.push({
+              role: turn.role,
+              content: turn.text,
+            });
+          }
         }
       }
 
       // Add current user turn if provided
-      if (input.userText) {
-        messages.push({
-          role: "user",
-          content: input.userText,
-        });
-      } else if (input.userLatex) {
-        messages.push({
-          role: "user",
-          content: `Solve: ${input.userLatex}`,
-        });
+      // Skip adding user message if problemText is provided directly (first message scenario)
+      // In this case, we want the conversation to start with the Assistant's first message
+      if (!input.problemText) {
+        if (input.userText) {
+          messages.push({
+            role: "user",
+            content: input.userText,
+          });
+        } else if (input.userLatex) {
+          messages.push({
+            role: "user",
+            content: `Solve: ${input.userLatex}`,
+          });
+        }
       }
 
       // Add file context if fileId is provided
@@ -186,6 +271,7 @@ export const aiRouter = createTRPCRouter({
       }
 
       // Stream the response using Vercel AI SDK
+      const mathTools = calculatorTools();
       const result = streamText({
         model: openai("gpt-4o-mini"),
         messages: messages.map((msg) => ({
@@ -195,148 +281,188 @@ export const aiRouter = createTRPCRouter({
         tools: {
           classifyTurn: classifyTurnTool,
           addBoardAnnotation: boardAnnotationTool,
+          checkAnswer: checkAnswerTool,
+          evaluate: evaluateTool,
+          ...mathTools,
         },
+        stopWhen: stepCountIs(5),
+        // maxSteps: 5, // Allow multiple steps: tool execution + text generation
       });
 
       // Process streaming response
       let fullText = "";
       let turnType: TurnClassifierResult["type"] | null = null;
       let toolMetadata: unknown = null;
+      let boardAnnotations: unknown[] | null = null as unknown[] | null;
 
-      // Stream text chunks
-      for await (const chunk of result.textStream) {
-        fullText += chunk;
-        yield { type: "text", content: chunk };
-      }
+      // Use fullStream to get both text and tool calls as they happen
+      // This ensures we get text that comes after tool execution
+      try {
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === "text-delta") {
+            fullText += chunk.text;
+            yield { type: "text", content: chunk.text };
+          } else if (chunk.type === "tool-call" && "input" in chunk) {
+            // Tool calls are handled automatically by the SDK
+            // We just track them for metadata
+            if (chunk.toolName === "classifyTurn") {
+              try {
+                const parsed = classifyTurnSchema.parse(chunk.input);
+                turnType = parsed.type;
+                toolMetadata = { type: parsed.type };
+              } catch {
+                // Ignore parse errors
+              }
+            } else if (chunk.toolName === "checkAnswer") {
+              try {
+                const parsed = checkAnswerSchema.parse(chunk.input);
+                const currentMetadata = toolMetadata as Record<
+                  string,
+                  unknown
+                > | null;
+                toolMetadata = {
+                  ...(currentMetadata ?? {}),
+                  answerCheck: {
+                    studentAnswer: parsed.studentAnswer,
+                    problemText: parsed.problemText,
+                  },
+                };
+              } catch (error) {
+                console.error("Failed to parse checkAnswer tool call:", error);
+              }
+            } else if (chunk.toolName === "addBoardAnnotation") {
+              try {
+                const parsed = boardAnnotationSchema.parse(chunk.input);
+                // Get current board state
+                const [board] = await ctx.db
+                  .select()
+                  .from(boards)
+                  .where(eq(boards.conversationId, input.conversationId))
+                  .limit(1);
 
-      // Process tool calls after streaming completes
-      const toolCalls = await result.toolCalls;
-      let boardAnnotations: unknown[] | null = null;
+                let currentScene: ExcalidrawScene;
+                let currentVersion: number;
 
-      for (const toolCall of toolCalls) {
-        if (
-          toolCall.toolName === "classifyTurn" &&
-          toolCall.type === "tool-call" &&
-          "input" in toolCall
-        ) {
-          try {
-            // toolCall.input is already parsed by the AI SDK
-            const parsed = classifyTurnSchema.parse(toolCall.input);
-            turnType = parsed.type;
-            toolMetadata = { type: parsed.type };
-          } catch {
-            // Ignore parse errors
-          }
-        } else if (
-          toolCall.toolName === "addBoardAnnotation" &&
-          toolCall.type === "tool-call" &&
-          "input" in toolCall
-        ) {
-          try {
-            const parsed = boardAnnotationSchema.parse(toolCall.input);
-            // Get current board state
-            const [board] = await ctx.db
-              .select()
-              .from(boards)
-              .where(eq(boards.conversationId, input.conversationId))
-              .limit(1);
+                if (board) {
+                  currentScene = dbFormatToScene(board.scene);
+                  currentVersion = board.version ?? 1;
+                } else {
+                  currentScene = {
+                    elements: [],
+                    appState: {},
+                    files: {},
+                  };
+                  currentVersion = 1;
+                }
 
-            let currentScene: ExcalidrawScene;
-            let currentVersion: number;
+                // Create new elements from annotations
+                const newElements: unknown[] = [];
+                for (const element of parsed.elements) {
+                  if (element.type === "box") {
+                    newElements.push(
+                      drawBox(
+                        element.x,
+                        element.y,
+                        element.width,
+                        element.height,
+                        element.label,
+                      ),
+                    );
+                  } else if (element.type === "arrow") {
+                    newElements.push(
+                      drawArrow(
+                        element.x1,
+                        element.y1,
+                        element.x2,
+                        element.y2,
+                        element.label,
+                      ),
+                    );
+                  } else if (element.type === "label") {
+                    newElements.push(
+                      drawLabel(
+                        element.x,
+                        element.y,
+                        element.text,
+                        element.fontSize,
+                      ),
+                    );
+                  } else if (element.type === "latex") {
+                    newElements.push(
+                      insertLatexAsImage(
+                        element.x,
+                        element.y,
+                        element.latex,
+                        element.width,
+                        element.height,
+                      ),
+                    );
+                  }
+                }
 
-            if (board) {
-              currentScene = dbFormatToScene(board.scene);
-              currentVersion = (board.version as number | null) ?? 1;
-            } else {
-              currentScene = {
-                elements: [],
-                appState: {},
-                files: {},
-              };
-              currentVersion = 1;
-            }
+                // Merge new elements into existing scene
+                const updatedScene: ExcalidrawScene = {
+                  ...currentScene,
+                  elements: [...(currentScene.elements ?? []), ...newElements],
+                };
 
-            // Create new elements from annotations
-            const newElements: unknown[] = [];
-            for (const element of parsed.elements) {
-              if (element.type === "box") {
-                newElements.push(
-                  drawBox(
-                    element.x,
-                    element.y,
-                    element.width,
-                    element.height,
-                    element.label,
-                  ),
-                );
-              } else if (element.type === "arrow") {
-                newElements.push(
-                  drawArrow(
-                    element.x1,
-                    element.y1,
-                    element.x2,
-                    element.y2,
-                    element.label,
-                  ),
-                );
-              } else if (element.type === "label") {
-                newElements.push(
-                  drawLabel(
-                    element.x,
-                    element.y,
-                    element.text,
-                    element.fontSize,
-                  ),
-                );
-              } else if (element.type === "latex") {
-                newElements.push(
-                  insertLatexAsImage(
-                    element.x,
-                    element.y,
-                    element.latex,
-                    element.width,
-                    element.height,
-                  ),
-                );
+                // Save updated board
+                const sceneData = sceneToDbFormat(updatedScene);
+                if (board) {
+                  // Update existing board
+                  await ctx.db
+                    .update(boards)
+                    .set({
+                      scene: sceneData,
+                      version: currentVersion + 1,
+                    })
+                    .where(eq(boards.id, board.id));
+                } else {
+                  // Create new board
+                  await ctx.db.insert(boards).values({
+                    conversationId: input.conversationId,
+                    scene: sceneData,
+                    version: 1,
+                  });
+                }
+
+                boardAnnotations = newElements;
+              } catch (error) {
+                console.error("Failed to add board annotations:", error);
               }
             }
-
-            // Merge new elements into existing scene
-            const updatedScene: ExcalidrawScene = {
-              ...currentScene,
-              elements: [...(currentScene.elements ?? []), ...newElements],
-            };
-
-            // Save updated board
-            const sceneData = sceneToDbFormat(updatedScene);
-            if (board) {
-              // Update existing board
-              await ctx.db
-                .update(boards)
-                .set({
-                  scene: sceneData,
-                  version: currentVersion + 1,
-                })
-                .where(eq(boards.id, board.id as string));
-            } else {
-              // Create new board
-              await ctx.db.insert(boards).values({
-                conversationId: input.conversationId,
-                scene: sceneData,
-                version: 1,
-              });
+          } else if (chunk.type === "tool-result") {
+            // Tool execution completed - AI will continue generating text
+          } else if (chunk.type === "error") {
+            console.error("[AI Router] Stream error:", chunk);
+          } else if (chunk.type === "finish") {
+            // When finishReason is 'tool-calls', the SDK should continue automatically
+            // Don't break - let the stream continue if there are more chunks
+            // Only break if it's a final finish (stop, length, etc.)
+            if (
+              "finishReason" in chunk &&
+              chunk.finishReason !== "tool-calls" &&
+              chunk.finishReason !== "other"
+            ) {
+              break;
             }
-
-            boardAnnotations = newElements;
-          } catch (error) {
-            // Log error but don't fail the turn
-            console.error("Failed to add board annotations:", error);
           }
         }
+      } catch (error) {
+        console.error("[AI Router] Error processing stream:", error);
+        // If we have any text so far, still yield it
+        if (fullText.trim()) {
+          yield { type: "text", content: fullText };
+        }
+        throw error;
       }
 
       // Yield board annotation event if any were added
-      if (boardAnnotations && boardAnnotations.length > 0) {
+      if (
+        boardAnnotations &&
+        Array.isArray(boardAnnotations) &&
+        boardAnnotations.length > 0
+      ) {
         yield {
           type: "boardAnnotation",
           elements: boardAnnotations,

@@ -1,19 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import { MathRenderer } from "../../conversation/_components/MathRenderer";
 import { Play, Square } from "lucide-react";
 
 interface ProblemHeaderProps {
-  problemText?: string;
-  problemLatex?: string;
   isTimerRunning: boolean;
   elapsedTimeMs: number;
   onStartPractice: () => void;
   onFinishSubmit: () => void;
-  onProblemChange?: (text: string, latex?: string) => void;
+  onProblemChange: (text: string) => void;
 }
 
 /**
@@ -30,89 +26,32 @@ function formatTime(ms: number): string {
 
 /**
  * ProblemHeader component for whiteboard practice mode
- * Compact header with problem input, timer, and action buttons
+ * Compact header with auto-generated problem, timer, and action buttons
  */
 export function ProblemHeader({
-  problemText: initialProblemText,
-  problemLatex: initialProblemLatex,
   isTimerRunning,
   elapsedTimeMs,
   onStartPractice,
   onFinishSubmit,
   onProblemChange,
 }: ProblemHeaderProps) {
-  const [problemText, setProblemText] = useState(initialProblemText ?? "");
-  const [problemLatex, setProblemLatex] = useState(initialProblemLatex);
-  const [isEditing, setIsEditing] = useState(!initialProblemText);
+  // Hardcoded problem for now - will be replaced with AI generation later
+  const problemText = "2 + 2";
 
-  const handleProblemTextChange = (value: string) => {
-    setProblemText(value);
-    if (onProblemChange) {
-      onProblemChange(value, problemLatex);
-    }
-  };
-
-  const handleProblemLatexChange = (value: string) => {
-    setProblemLatex(value || undefined);
-    if (onProblemChange) {
-      onProblemChange(problemText, value || undefined);
-    }
-  };
+  // Generate problem on mount and notify parent
+  useEffect(() => {
+    onProblemChange(problemText);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   return (
     <div className="bg-background border-b p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-2">
-          {isEditing ? (
-            <div className="space-y-2">
-              <Textarea
-                value={problemText}
-                onChange={(e) => handleProblemTextChange(e.target.value)}
-                placeholder="Enter the problem statement..."
-                className="min-h-[60px] resize-none"
-              />
-              <Textarea
-                value={problemLatex ?? ""}
-                onChange={(e) => handleProblemLatexChange(e.target.value)}
-                placeholder="Enter LaTeX (optional, e.g., $x^2 + 5x + 6 = 0$)..."
-                className="min-h-[40px] resize-none font-mono text-sm"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setIsEditing(false);
-                }}
-              >
-                Done
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-medium">Problem:</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsEditing(true)}
-                >
-                  Edit
-                </Button>
-              </div>
-              {problemText ? (
-                <p className="text-muted-foreground text-sm">{problemText}</p>
-              ) : (
-                <p className="text-muted-foreground text-sm italic">
-                  No problem entered
-                </p>
-              )}
-              {problemLatex && (
-                <div className="bg-muted/50 rounded-md border p-2">
-                  <MathRenderer latex={problemLatex} displayMode={true} />
-                </div>
-              )}
-            </div>
-          )}
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Problem:</h3>
+            <p className="text-muted-foreground text-sm">{problemText}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           {isTimerRunning && (
@@ -125,8 +64,7 @@ export function ProblemHeader({
             disabled={isTimerRunning || !problemText.trim()}
             size="sm"
           >
-            <Play className="mr-2 h-4 w-4" />
-            Start Practice
+            <Play className="h-4 w-4" />
           </Button>
           <Button
             onClick={onFinishSubmit}
@@ -134,8 +72,7 @@ export function ProblemHeader({
             variant="default"
             size="sm"
           >
-            <Square className="mr-2 h-4 w-4" />
-            Finish & Submit
+            <Square className="h-4 w-4" />
           </Button>
         </div>
       </div>

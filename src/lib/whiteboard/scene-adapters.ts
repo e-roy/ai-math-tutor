@@ -15,6 +15,30 @@ export function sceneToDbFormat(scene: ExcalidrawScene): unknown {
 }
 
 /**
+ * Sanitize appState to ensure Excalidraw-required properties are properly formatted
+ * Fixes issues with collaborators and other properties that must be arrays
+ */
+function sanitizeAppState(
+  appState: Partial<Record<string, unknown>>,
+): Partial<Record<string, unknown>> {
+  const sanitized = { ...appState };
+
+  // Ensure collaborators is always an array or undefined
+  // Excalidraw's InteractiveCanvas expects collaborators.forEach to work
+  if ("collaborators" in sanitized) {
+    if (Array.isArray(sanitized.collaborators)) {
+      // Keep it as is - it's already an array
+    } else {
+      // Remove invalid collaborators property (not an array)
+      // Excalidraw will handle undefined correctly
+      delete sanitized.collaborators;
+    }
+  }
+
+  return sanitized;
+}
+
+/**
  * Convert database JSON format back to Excalidraw scene
  * Handles versioning and validates structure
  */
@@ -30,12 +54,17 @@ export function dbFormatToScene(dbJson: unknown): ExcalidrawScene {
 
   const data = dbJson as Record<string, unknown>;
 
+  const rawAppState =
+    data.appState && typeof data.appState === "object"
+      ? (data.appState as Partial<Record<string, unknown>>)
+      : {};
+
+  // Sanitize appState to ensure Excalidraw-compatible format
+  const sanitizedAppState = sanitizeAppState(rawAppState);
+
   return {
     elements: Array.isArray(data.elements) ? data.elements : [],
-    appState:
-      data.appState && typeof data.appState === "object"
-        ? (data.appState as Partial<Record<string, unknown>>)
-        : {},
+    appState: sanitizedAppState,
     files:
       data.files && typeof data.files === "object"
         ? (data.files as Record<string, unknown>)
