@@ -2,9 +2,9 @@
 
 import Image from "next/image";
 
-import { UploadDropzone } from "@/components/UploadDropzone";
-import { ChatPane } from "@/components/ChatPane";
-import { MathRenderer } from "@/components/MathRenderer";
+import { UploadDropzone } from "./UploadDropzone";
+import { ChatPane } from "./ChatPane";
+import { MathRenderer } from "./MathRenderer";
 import type { UploadedImage } from "@/types/files";
 
 interface ProblemPanelProps {

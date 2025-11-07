@@ -3,8 +3,8 @@
 import type { Turn } from "@/server/db/turns";
 import type { TurnType } from "@/types/ai";
 import { Badge } from "@/components/ui/badge";
-import { MathRenderer } from "@/components/MathRenderer";
-import { MathText } from "@/components/MathText";
+import { MathRenderer } from "../app/(app)/tutor/conversation/_components/MathRenderer";
+import { MathText } from "../app/(app)/tutor/conversation/_components/MathText";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {
@@ -37,14 +37,13 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const isUser = turn.role === "user";
   const displayText = isStreaming && streamingText ? streamingText : turn.text;
-  const displayType = isStreaming ? turnType : (turn.tool as { type?: TurnType })?.type ?? turnType;
+  const displayType = isStreaming
+    ? turnType
+    : ((turn.tool as { type?: TurnType })?.type ?? turnType);
 
   return (
     <div
-      className={cn(
-        "flex w-full",
-        isUser ? "justify-end" : "justify-start",
-      )}
+      className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
     >
       <div
         className={cn(
@@ -72,10 +71,9 @@ export function MessageBubble({
           </div>
         )}
         {isStreaming && (
-          <span className="inline-block ml-1 animate-pulse">▊</span>
+          <span className="ml-1 inline-block animate-pulse">▊</span>
         )}
       </div>
     </div>
   );
 }
-

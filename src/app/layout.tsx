@@ -5,7 +5,6 @@ import { Geist } from "next/font/google";
 
 import { TRPCReactProvider } from "@/trpc/react";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { ConditionalHeader } from "@/components/ConditionalHeader";
 
 export const metadata: Metadata = {
   title: "AI Math Tutor",
@@ -25,10 +24,7 @@ export default function RootLayout({
     <html lang="en" className={`${geist.variable}`} suppressHydrationWarning>
       <body>
         <ThemeProvider>
-          <TRPCReactProvider>
-            <ConditionalHeader />
-            {children}
-          </TRPCReactProvider>
+          <TRPCReactProvider>{children}</TRPCReactProvider>
         </ThemeProvider>
       </body>
     </html>

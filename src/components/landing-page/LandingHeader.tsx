@@ -5,8 +5,8 @@ import { Button } from "@/components/ui/button";
 
 export function LandingHeader() {
   return (
-    <header className="bg-background/95 supports-[backdrop-filter]:bg-background/60 border-b backdrop-blur">
-      <div className="container flex h-16 items-center justify-between px-4">
+    <header className="bg-background/95 supports-backdrop-filter:bg-background/60 border-b backdrop-blur">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
         <Link href="/" className="text-xl font-bold">
           AI Math Tutor
         </Link>

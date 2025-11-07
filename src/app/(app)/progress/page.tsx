@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
-import { NavBar } from "@/components/NavBar";
-import { ProgressOverview } from "./ProgressOverview";
+import { NavBar } from "@/app/(app)/_components/NavBar";
+import { ProgressOverview } from "./_components/ProgressOverview";
 
 export default async function ProgressPage() {
   const session = await auth();

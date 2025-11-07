@@ -2,17 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import { useSession } from "next-auth/react";
 import { signOutAction } from "@/app/actions/auth";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { BookOpen, Home, TrendingUp } from "lucide-react";
-import { type Session } from "next-auth";
 
-interface NavBarClientProps {
-  session: Session | null;
-}
-
-export function NavBarClient({ session }: NavBarClientProps) {
+export function NavBar() {
   const pathname = usePathname();
+  const { data: session, status } = useSession();
 
   const navItems = [
     { href: "/app", label: "Home", icon: Home },
@@ -22,7 +20,7 @@ export function NavBarClient({ session }: NavBarClientProps) {
 
   return (
     <nav className="bg-background border-b">
-      <div className="container flex h-16 items-center justify-between px-4">
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
           <Link href="/app" className="text-lg font-semibold">
             AI Math Tutor
@@ -48,7 +46,9 @@ export function NavBarClient({ session }: NavBarClientProps) {
           </div>
         </div>
         <div className="flex items-center gap-4">
-          {session ? (
+          {status === "loading" ? (
+            <Skeleton className="h-5 w-32" />
+          ) : session ? (
             <>
               <span className="text-muted-foreground text-sm">
                 {session.user?.name ?? session.user?.email}
@@ -59,11 +59,7 @@ export function NavBarClient({ session }: NavBarClientProps) {
                 </Button>
               </form>
             </>
-          ) : (
-            <Button asChild variant="default" size="sm">
-              <Link href="/signin">Sign In</Link>
-            </Button>
-          )}
+          ) : null}
         </div>
       </div>
     </nav>

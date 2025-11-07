@@ -1,6 +1,5 @@
 "use client";
 
-import { PathSwitch } from "@/components/PathSwitch";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -8,8 +7,7 @@ import type { TutorPath } from "@/types/conversation";
 
 interface TutorHeaderProps {
   currentPath: TutorPath | null;
-  onSwitchToConversation: () => void;
-  onSwitchToWhiteboard: () => void;
+
   tutorPersona?: {
     displayName: string;
     avatarUrl?: string;
@@ -19,12 +17,7 @@ interface TutorHeaderProps {
 /**
  * TutorHeader component - header for tutor page with path switching
  */
-export function TutorHeader({
-  currentPath,
-  onSwitchToConversation,
-  onSwitchToWhiteboard,
-  tutorPersona,
-}: TutorHeaderProps) {
+export function TutorHeader({ currentPath, tutorPersona }: TutorHeaderProps) {
   return (
     <header className="bg-background flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
       <div className="flex items-center gap-2 px-4">
@@ -76,13 +69,6 @@ export function TutorHeader({
               </div>
             )}
           </div>
-          {currentPath && (
-            <PathSwitch
-              currentPath={currentPath}
-              onSwitchToConversation={onSwitchToConversation}
-              onSwitchToWhiteboard={onSwitchToWhiteboard}
-            />
-          )}
         </div>
       </div>
     </header>

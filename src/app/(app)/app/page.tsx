@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { NavBar } from "@/components/NavBar";
+import { NavBar } from "@/app/(app)/_components/NavBar";
 import { auth } from "@/server/auth";
 import { api, HydrateClient } from "@/trpc/server";
 import {
@@ -13,8 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { BookOpen, TrendingUp } from "lucide-react";
-import { EmptyStateWithWizard } from "@/components/EmptyStateWithWizard";
-import { ChildrenList } from "@/components/ChildrenList";
+import { EmptyStateWithWizard } from "@/app/(app)/app/_components/EmptyStateWithWizard";
+import { ChildrenList } from "@/app/(app)/app/_components/ChildrenList";
 
 export default async function AppPage() {
   const session = await auth();
@@ -24,13 +24,13 @@ export default async function AppPage() {
   }
 
   // Fetch children for the authenticated user
-  const children = await api.children.list();
+  const students = await api.children.list();
 
   return (
     <HydrateClient>
       <NavBar />
-      <main className="container py-16">
-        {children.length === 0 ? (
+      <main className="mx-auto max-w-7xl py-16">
+        {students.length === 0 ? (
           // Empty state: no children yet
           <EmptyStateWithWizard />
         ) : (
@@ -46,7 +46,7 @@ export default async function AppPage() {
             </div>
 
             {/* Children Cards */}
-            <ChildrenList children={children} />
+            <ChildrenList students={students} />
 
             <div className="grid w-full max-w-4xl gap-6 md:grid-cols-2">
               <Card>

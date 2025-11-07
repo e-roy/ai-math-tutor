@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { MathRenderer } from "@/components/MathRenderer";
+import { MathRenderer } from "../../conversation/_components/MathRenderer";
 import { Play, Square } from "lucide-react";
 
 interface ProblemHeaderProps {
@@ -60,7 +60,7 @@ export function ProblemHeader({
   };
 
   return (
-    <div className="border-b bg-background p-4">
+    <div className="bg-background border-b p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="flex-1 space-y-2">
           {isEditing ? (
@@ -100,14 +100,14 @@ export function ProblemHeader({
                 </Button>
               </div>
               {problemText ? (
-                <p className="text-sm text-muted-foreground">{problemText}</p>
+                <p className="text-muted-foreground text-sm">{problemText}</p>
               ) : (
                 <p className="text-muted-foreground text-sm italic">
                   No problem entered
                 </p>
               )}
               {problemLatex && (
-                <div className="rounded-md border bg-muted/50 p-2">
+                <div className="bg-muted/50 rounded-md border p-2">
                   <MathRenderer latex={problemLatex} displayMode={true} />
                 </div>
               )}
@@ -116,7 +116,7 @@ export function ProblemHeader({
         </div>
         <div className="flex items-center gap-3">
           {isTimerRunning && (
-            <div className="text-muted-foreground text-sm font-mono">
+            <div className="text-muted-foreground font-mono text-sm">
               {formatTime(elapsedTimeMs)}
             </div>
           )}
@@ -142,4 +142,3 @@ export function ProblemHeader({
     </div>
   );
 }
-

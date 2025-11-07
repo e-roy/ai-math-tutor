@@ -8,7 +8,7 @@ import {
   SidebarContent,
   SidebarHeader,
 } from "@/components/ui/sidebar";
-import { ConversationList } from "@/components/ConversationList";
+import { ConversationList } from "./ConversationList";
 
 interface ConversationSidebarProps
   extends React.ComponentProps<typeof Sidebar> {

@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { api } from "@/trpc/react";
-import { MathRenderer } from "@/components/MathRenderer";
+import { MathRenderer } from "../../conversation/_components/MathRenderer";
 import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
 interface ResultsModalProps {
@@ -135,33 +135,33 @@ export function ResultsModal({
               </div>
 
               {/* Metrics */}
-              <div className="grid grid-cols-3 gap-4 rounded-lg border bg-muted/50 p-4">
+              <div className="bg-muted/50 grid grid-cols-3 gap-4 rounded-lg border p-4">
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Time</p>
-                  <p className="text-sm font-mono">
+                  <p className="text-muted-foreground text-xs">Time</p>
+                  <p className="font-mono text-sm">
                     {formatTime(session.timeOnTaskMs)}
                   </p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Attempts</p>
+                  <p className="text-muted-foreground text-xs">Attempts</p>
                   <p className="text-sm font-semibold">{session.attempts}</p>
                 </div>
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Hints Used</p>
+                  <p className="text-muted-foreground text-xs">Hints Used</p>
                   <p className="text-sm font-semibold">{session.hintsUsed}</p>
                 </div>
               </div>
 
               {/* Answers Comparison */}
-              {(session.studentAnswer || session.expectedAnswer) && (
+              {(session.studentAnswer ?? session.expectedAnswer) && (
                 <div className="space-y-3 rounded-lg border p-4">
                   <p className="text-sm font-medium">Answer Comparison</p>
                   {session.expectedAnswer && (
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         Expected Answer:
                       </p>
-                      <div className="rounded-md border bg-background p-2">
+                      <div className="bg-background rounded-md border p-2">
                         {session.expectedAnswer.includes("$") ||
                         session.expectedAnswer.includes("\\(") ||
                         session.expectedAnswer.includes("\\[") ? (
@@ -177,10 +177,10 @@ export function ResultsModal({
                   )}
                   {session.studentAnswer && (
                     <div className="space-y-1">
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         Your Answer:
                       </p>
-                      <div className="rounded-md border bg-background p-2">
+                      <div className="bg-background rounded-md border p-2">
                         {session.studentAnswer.includes("$") ||
                         session.studentAnswer.includes("\\(") ||
                         session.studentAnswer.includes("\\[") ? (
@@ -199,8 +199,8 @@ export function ResultsModal({
 
               {/* Notes/Reason */}
               {session.notes && (
-                <div className="space-y-1 rounded-lg border bg-muted/50 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">
+                <div className="bg-muted/50 space-y-1 rounded-lg border p-3">
+                  <p className="text-muted-foreground text-xs font-medium">
                     Feedback:
                   </p>
                   <p className="text-sm">{session.notes}</p>
@@ -213,7 +213,7 @@ export function ResultsModal({
             <div className="space-y-4">
               <div className="space-y-2">
                 <p className="text-sm font-medium">Time on Task:</p>
-                <p className="text-muted-foreground text-sm font-mono">
+                <p className="text-muted-foreground font-mono text-sm">
                   {formatTime(timeOnTaskMs)}
                 </p>
               </div>
@@ -231,4 +231,3 @@ export function ResultsModal({
     </Dialog>
   );
 }
-

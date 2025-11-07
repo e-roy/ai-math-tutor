@@ -3,10 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 
-import { Whiteboard } from "@/components/Whiteboard";
-import { ProblemHeader } from "@/components/ProblemHeader";
-import { EphemeralChatPane } from "@/components/EphemeralChatPane";
-import { ResultsModal } from "@/components/ResultsModal";
+import { ProblemHeader } from "./ProblemHeader";
+import { EphemeralChatPane } from "./EphemeralChatPane";
+import { ResultsModal } from "./ResultsModal";
 import {
   Sheet,
   SheetContent,
@@ -23,9 +22,11 @@ import { extractExpectedAnswer } from "@/lib/grading/equivalence";
 // Dynamically import Whiteboard to avoid SSR issues with Excalidraw
 const DynamicWhiteboard = dynamic(
   () =>
-    import("@/components/Whiteboard").then((mod) => ({
-      default: mod.Whiteboard,
-    })),
+    import("@/app/(app)/tutor/whiteboard/_components/Whiteboard").then(
+      (mod) => ({
+        default: mod.Whiteboard,
+      }),
+    ),
   {
     ssr: false,
     loading: () => (
@@ -49,9 +50,7 @@ interface WhiteboardPanelProps {
  * - Ephemeral chat (not persisted to database)
  * - Results modal on submission
  */
-export function WhiteboardPanel({
-  conversationId,
-}: WhiteboardPanelProps) {
+export function WhiteboardPanel({ conversationId }: WhiteboardPanelProps) {
   // Timer state
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [elapsedTimeMs, setElapsedTimeMs] = useState(0);
@@ -146,12 +145,12 @@ export function WhiteboardPanel({
     if (!lastUserTurn) return null;
 
     // Prefer LaTeX if available
-    if (lastUserTurn.latex && lastUserTurn.latex.trim()) {
+    if (lastUserTurn.latex?.trim()) {
       return lastUserTurn.latex.trim();
     }
 
     // Fall back to text
-    if (lastUserTurn.text && lastUserTurn.text.trim()) {
+    if (lastUserTurn.text?.trim()) {
       return lastUserTurn.text.trim();
     }
 
@@ -228,7 +227,7 @@ export function WhiteboardPanel({
         <Sheet open={isChatOpen} onOpenChange={setIsChatOpen}>
           <SheetTrigger asChild>
             <Button
-              className="fixed bottom-4 right-4 z-10 h-12 w-12 rounded-full shadow-lg"
+              className="fixed right-4 bottom-4 z-10 h-12 w-12 rounded-full shadow-lg"
               size="icon"
               variant="default"
             >
@@ -263,4 +262,3 @@ export function WhiteboardPanel({
     </div>
   );
 }
-

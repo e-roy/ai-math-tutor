@@ -22,7 +22,7 @@ export function SkillDetail({ skill, conversationId }: SkillDetailProps) {
           <div>
             <CardTitle className="text-lg">{skill.topic}</CardTitle>
             {skill.subtopic && (
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="text-muted-foreground mt-1 text-sm">
                 {skill.subtopic}
               </p>
             )}
@@ -32,19 +32,17 @@ export function SkillDetail({ skill, conversationId }: SkillDetailProps) {
       </CardHeader>
       <CardContent className="space-y-4">
         {skill.description && (
-          <p className="text-sm text-muted-foreground">{skill.description}</p>
+          <p className="text-muted-foreground text-sm">{skill.description}</p>
         )}
 
         {/* Mastery Level */}
         <div>
-          <div className="flex items-center justify-between mb-2">
+          <div className="mb-2 flex items-center justify-between">
             <span className="text-sm font-medium">Mastery Level</span>
-            <span className="text-sm font-semibold">
-              {masteryLevel} / 4
-            </span>
+            <span className="text-sm font-semibold">{masteryLevel} / 4</span>
           </div>
           <Progress value={masteryPercent} className="h-2" />
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="text-muted-foreground mt-1 text-xs">
             {masteryLevel === 0 && "Not started"}
             {masteryLevel === 1 && "Beginning"}
             {masteryLevel === 2 && "Developing"}
@@ -54,33 +52,34 @@ export function SkillDetail({ skill, conversationId }: SkillDetailProps) {
         </div>
 
         {/* Evidence */}
-        {skill.mastery &&
-          skill.mastery.evidence &&
+        {skill.mastery?.evidence &&
           typeof skill.mastery.evidence === "object" &&
           "turnIds" in skill.mastery.evidence &&
           "snapshotIds" in skill.mastery.evidence &&
           "rubric" in skill.mastery.evidence && (
             <EvidenceView
-              evidence={skill.mastery.evidence as {
-                turnIds: string[];
-                snapshotIds: string[];
-                rubric: {
-                  accuracy: number;
-                  method: string;
-                  explanation: string;
-                };
-              }}
+              evidence={
+                skill.mastery.evidence as {
+                  turnIds: string[];
+                  snapshotIds: string[];
+                  rubric: {
+                    accuracy: number;
+                    method: string;
+                    explanation: string;
+                  };
+                }
+              }
               conversationId={conversationId}
             />
           )}
 
-        {skill.mastery && (
-          <p className="text-xs text-muted-foreground">
-            Last updated: {new Date(skill.mastery.updatedAt).toLocaleDateString()}
+        {skill.mastery?.updatedAt && (
+          <p className="text-muted-foreground text-xs">
+            Last updated:{" "}
+            {new Date(skill.mastery.updatedAt).toLocaleDateString()}
           </p>
         )}
       </CardContent>
     </Card>
   );
 }
-

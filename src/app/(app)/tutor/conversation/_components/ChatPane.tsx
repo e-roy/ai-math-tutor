@@ -178,14 +178,14 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
     // TODO: Extract expected answer from conversation context or problem
     // For now, we'll just validate that the answer is a valid expression
     // and let the AI tutor verify correctness through conversation
-    
+
     // If we have an expected answer (from context), validate equivalence
     // For MVP, we'll skip this and let the tutor handle validation
     // const expectedAnswer = extractExpectedAnswer(turns);
     // if (expectedAnswer) {
     //   const clientResult = checkEquivalence(answer, expectedAnswer);
     //   let isValid = clientResult.isEquivalent;
-    //   
+    //
     //   if (clientResult.confidence === "low") {
     //     // Call server endpoint for LLM validation
     //     try {
@@ -198,7 +198,7 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
     //       console.error("Validation error:", error);
     //     }
     //   }
-    //   
+    //
     //   // Update mastery if answer is correct
     //   // TODO: Extract skillId from conversation context or problem
     //   if (isValid) {

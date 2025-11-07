@@ -1,6 +1,6 @@
 "use client";
 
-import { MathRenderer } from "@/components/MathRenderer";
+import { MathRenderer } from "./MathRenderer";
 import { parseMathText } from "@/lib/math/render";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +17,7 @@ export function MathText({ text, className }: MathTextProps) {
   const segments = parseMathText(text);
 
   return (
-    <span className={cn("whitespace-pre-wrap break-words", className)}>
+    <span className={cn("break-words whitespace-pre-wrap", className)}>
       {segments.map((segment, index) => {
         if (segment.type === "text") {
           return <span key={index}>{segment.content}</span>;

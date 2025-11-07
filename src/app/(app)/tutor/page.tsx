@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/server/auth";
-import { TutorClient } from "./TutorClient";
+import { TutorClient } from "@/app/(app)/tutor/_components/TutorClient";
 
 export default async function TutorPage() {
   const session = await auth();
@@ -9,6 +9,5 @@ export default async function TutorPage() {
     redirect("/signin?callbackUrl=/tutor");
   }
 
-  return <TutorClient session={session} />;
+  return <TutorClient />;
 }
-

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MathRenderer } from "@/components/MathRenderer";
+import { MathRenderer } from "../app/(app)/tutor/conversation/_components/MathRenderer";
 import { parse } from "mathjs";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
@@ -102,13 +102,13 @@ export function MathAnswerBox({
             )}
           />
           {hasValidInput && !isValidating && (
-            <CheckCircle2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-green-500" />
+            <CheckCircle2 className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-green-500" />
           )}
           {validationError && !isValidating && (
-            <XCircle className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-destructive" />
+            <XCircle className="text-destructive absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2" />
           )}
           {isValidating && (
-            <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+            <Loader2 className="text-muted-foreground absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 animate-spin" />
           )}
         </div>
         <Button
@@ -120,11 +120,11 @@ export function MathAnswerBox({
         </Button>
       </div>
       {validationError && (
-        <p className="text-sm text-destructive">{validationError}</p>
+        <p className="text-destructive text-sm">{validationError}</p>
       )}
       {parsedLatex && !validationError && (
-        <div className="rounded-md border bg-muted/50 p-2">
-          <p className="text-xs text-muted-foreground mb-1">Preview:</p>
+        <div className="bg-muted/50 rounded-md border p-2">
+          <p className="text-muted-foreground mb-1 text-xs">Preview:</p>
           <MathRenderer latex={parsedLatex} displayMode={false} />
         </div>
       )}

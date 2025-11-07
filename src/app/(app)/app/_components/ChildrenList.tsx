@@ -11,9 +11,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { ChildCard } from "@/components/ChildCard";
-import { TutorPersonaForm } from "@/components/TutorPersonaForm";
-import { AddChildWizard } from "@/components/AddChildWizard";
+import { ChildCard } from "@/app/(app)/app/_components/ChildCard";
+import { TutorPersonaForm } from "@/app/(app)/app/_components/TutorPersonaForm";
+import { AddChildWizard } from "@/app/(app)/app/_components/AddChildWizard";
 
 type Child = {
   id: string;
@@ -26,34 +26,34 @@ type Child = {
 };
 
 interface ChildrenListProps {
-  children: Child[];
+  students: Child[];
 }
 
-export function ChildrenList({ children }: ChildrenListProps) {
+export function ChildrenList({ students }: ChildrenListProps) {
   const [customizingChildId, setCustomizingChildId] = useState<string | null>(
     null,
   );
   const [isAddWizardOpen, setIsAddWizardOpen] = useState(false);
 
-  const customizingChild = children.find(
+  const customizingChild = students.find(
     (child) => child.id === customizingChildId,
   );
 
   return (
     <>
       <div className="grid w-full max-w-4xl gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {children.map((child) => (
+        {students.map((child) => (
           <ChildCard
             key={child.id}
             child={child}
             onCustomize={(childId) => setCustomizingChildId(childId)}
           />
         ))}
-        <Card className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50 border-dashed">
+        <Card className="hover:border-primary/50 cursor-pointer border-dashed transition-all hover:shadow-md">
           <CardHeader>
             <div className="flex flex-col items-center justify-center gap-4 py-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <UserPlus className="h-8 w-8 text-muted-foreground" />
+              <div className="bg-muted flex h-16 w-16 items-center justify-center rounded-full">
+                <UserPlus className="text-muted-foreground h-8 w-8" />
               </div>
               <div className="text-center">
                 <CardTitle>Add Child</CardTitle>
@@ -96,4 +96,3 @@ export function ChildrenList({ children }: ChildrenListProps) {
     </>
   );
 }
-
