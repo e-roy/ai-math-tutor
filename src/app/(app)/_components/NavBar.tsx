@@ -6,7 +6,7 @@ import { useSession } from "next-auth/react";
 import { signOutAction } from "@/app/actions/auth";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { BookOpen, Home, TrendingUp } from "lucide-react";
+import { Home, TrendingUp } from "lucide-react";
 
 export function NavBar() {
   const pathname = usePathname();
@@ -14,7 +14,6 @@ export function NavBar() {
 
   const navItems = [
     { href: "/app", label: "Home", icon: Home },
-    { href: "/tutor", label: "Tutor", icon: BookOpen },
     { href: "/progress", label: "Progress", icon: TrendingUp },
   ];
 

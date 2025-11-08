@@ -30,7 +30,7 @@ export function ConversationClient() {
   const createConversation = api.conversations.create.useMutation({
     onSuccess: (data) => {
       setSelectedConversationId(data.conversationId);
-      router.push(`/tutor/conversation?id=${data.conversationId}`);
+      router.push(`/app/conversation?id=${data.conversationId}`);
     },
   });
 
@@ -89,7 +89,7 @@ export function ConversationClient() {
       selectedConversationId &&
       conversationIdFromUrl !== selectedConversationId
     ) {
-      router.push(`/tutor/conversation?id=${selectedConversationId}`);
+      router.push(`/app/conversation?id=${selectedConversationId}`);
     }
   }, [selectedConversationId, conversationIdFromUrl, router]);
 
@@ -120,7 +120,7 @@ export function ConversationClient() {
     clearTurns();
     setUploadedImages([]);
     setSelectedConversationId(conversationId);
-    router.push(`/tutor/conversation?id=${conversationId}`);
+    router.push(`/app/conversation?id=${conversationId}`);
   };
 
   const handleNewConversation = () => {

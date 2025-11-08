@@ -46,8 +46,8 @@ export function EvidenceView({ evidence, conversationId }: EvidenceViewProps) {
                   key={turnId}
                   href={
                     conversationId
-                      ? `/tutor?conversationId=${conversationId}`
-                      : "/tutor"
+                      ? `/app/conversation?id=${conversationId}`
+                      : "/app/conversation"
                   }
                   className="text-sm"
                 >
@@ -70,8 +70,8 @@ export function EvidenceView({ evidence, conversationId }: EvidenceViewProps) {
                   key={snapshotId}
                   href={
                     conversationId
-                      ? `/tutor?conversationId=${conversationId}`
-                      : "/tutor"
+                      ? `/app/conversation?id=${conversationId}`
+                      : "/app/conversation"
                   }
                   className="text-sm"
                 >

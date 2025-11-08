@@ -13,7 +13,7 @@ export default async function ProgressPage() {
   return (
     <>
       <NavBar />
-      <main className="container py-8">
+      <main className="mx-auto max-w-7xl py-8">
         <div className="mb-8">
           <h1 className="text-4xl font-bold">Progress</h1>
           <p className="text-muted-foreground mt-2">

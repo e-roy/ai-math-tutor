@@ -26,9 +26,10 @@ type Child = {
 interface ChildCardProps {
   child: Child;
   onCustomize: (childId: string) => void;
+  onSelect?: (childId: string) => void;
 }
 
-export function ChildCard({ child, onCustomize }: ChildCardProps) {
+export function ChildCard({ child, onCustomize, onSelect }: ChildCardProps) {
   const currentChildId = useChildStore((state) => state.currentChildId);
   const setChildId = useChildStore((state) => state.setChildId);
 
@@ -42,8 +43,13 @@ export function ChildCard({ child, onCustomize }: ChildCardProps) {
     ) {
       return;
     }
-    // Select the child (no navigation - user will use menu to go to tutor)
-    setChildId(child.id);
+    // If onSelect callback is provided, use it; otherwise use store-based behavior
+    if (onSelect) {
+      onSelect(child.id);
+    } else {
+      // Select the child (no navigation - user will use menu to go to tutor)
+      setChildId(child.id);
+    }
   };
 
   const handleCustomizeClick = (e: React.MouseEvent) => {

@@ -27,9 +27,10 @@ type Child = {
 
 interface ChildrenListProps {
   students: Child[];
+  onSelectChild?: (childId: string) => void;
 }
 
-export function ChildrenList({ students }: ChildrenListProps) {
+export function ChildrenList({ students, onSelectChild }: ChildrenListProps) {
   const [customizingChildId, setCustomizingChildId] = useState<string | null>(
     null,
   );
@@ -47,6 +48,7 @@ export function ChildrenList({ students }: ChildrenListProps) {
             key={child.id}
             child={child}
             onCustomize={(childId) => setCustomizingChildId(childId)}
+            onSelect={onSelectChild}
           />
         ))}
         <Card className="hover:border-primary/50 cursor-pointer border-dashed transition-all hover:shadow-md">

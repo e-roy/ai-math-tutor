@@ -12,10 +12,9 @@ export async function middleware(request: NextRequest) {
   // Set pathname header for server components to read
   response.headers.set("x-pathname", pathname);
 
-  // Protect /app, /tutor and /progress routes
+  // Protect /app and /progress routes
   if (
     pathname.startsWith("/app") ||
-    pathname.startsWith("/tutor") ||
     pathname.startsWith("/progress")
   ) {
     if (!session) {

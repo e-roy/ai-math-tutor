@@ -3,8 +3,8 @@
 import type { Turn } from "@/server/db/turns";
 import type { TurnType } from "@/types/ai";
 import { Badge } from "@/components/ui/badge";
-import { MathRenderer } from "../app/(app)/tutor/conversation/_components/MathRenderer";
-import { MathText } from "../app/(app)/tutor/conversation/_components/MathText";
+import { MathRenderer } from "@/app/(app)/app/conversation/_components/MathRenderer";
+import { MathText } from "@/app/(app)/app/conversation/_components/MathText";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { MathRenderer } from "../app/(app)/tutor/conversation/_components/MathRenderer";
+import { MathRenderer } from "@/app/(app)/app/conversation/_components/MathRenderer";
 import { parse } from "mathjs";
 import { cn } from "@/lib/utils";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";

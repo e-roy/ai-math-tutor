@@ -9,7 +9,7 @@ import { api } from "@/trpc/react";
 // Dynamically import Whiteboard to avoid SSR issues with Excalidraw
 const DynamicWhiteboard = dynamic(
   () =>
-    import("@/app/(app)/tutor/whiteboard/_components/Whiteboard").then(
+    import("@/app/(app)/app/whiteboard/_components/Whiteboard").then(
       (mod) => ({
         default: mod.Whiteboard,
       }),

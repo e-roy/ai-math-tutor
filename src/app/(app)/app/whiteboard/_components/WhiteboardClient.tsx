@@ -56,7 +56,7 @@ export function WhiteboardClient() {
   const createConversation = api.conversations.create.useMutation({
     onSuccess: (data) => {
       setSelectedConversationId(data.conversationId);
-      router.push(`/tutor/whiteboard?id=${data.conversationId}`);
+      router.push(`/app/whiteboard?id=${data.conversationId}`);
     },
   });
 
@@ -83,7 +83,7 @@ export function WhiteboardClient() {
       selectedConversationId &&
       conversationIdFromUrl !== selectedConversationId
     ) {
-      router.push(`/tutor/whiteboard?id=${selectedConversationId}`);
+      router.push(`/app/whiteboard?id=${selectedConversationId}`);
     }
   }, [selectedConversationId, conversationIdFromUrl, router]);
 
