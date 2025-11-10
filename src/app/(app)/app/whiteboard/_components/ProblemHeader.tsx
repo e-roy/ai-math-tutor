@@ -1,15 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Play, Square } from "lucide-react";
 import { api } from "@/trpc/react";
 
 interface ProblemHeaderProps {
   isTimerRunning: boolean;
   elapsedTimeMs: number;
-  onStartPractice: () => void;
-  onFinishSubmit: () => void;
   onProblemChange: (text: string) => void;
 }
 
@@ -32,8 +28,6 @@ function formatTime(ms: number): string {
 export function ProblemHeader({
   isTimerRunning,
   elapsedTimeMs,
-  onStartPractice,
-  onFinishSubmit,
   onProblemChange,
 }: ProblemHeaderProps) {
   const [problemText, setProblemText] = useState<string>("");
@@ -84,21 +78,6 @@ export function ProblemHeader({
               {formatTime(elapsedTimeMs)}
             </div>
           )}
-          <Button
-            onClick={onStartPractice}
-            disabled={isTimerRunning || !problemText.trim()}
-            size="sm"
-          >
-            <Play className="h-4 w-4" />
-          </Button>
-          <Button
-            onClick={onFinishSubmit}
-            disabled={!isTimerRunning}
-            variant="default"
-            size="sm"
-          >
-            <Square className="h-4 w-4" />
-          </Button>
         </div>
       </div>
     </div>

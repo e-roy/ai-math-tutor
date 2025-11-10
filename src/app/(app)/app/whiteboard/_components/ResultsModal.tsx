@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -79,6 +80,8 @@ export function ResultsModal({
   timeOnTaskMs,
   sessionId,
 }: ResultsModalProps) {
+  const router = useRouter();
+
   // Fetch practice session if sessionId provided
   const { data: session, isLoading } = api.practice.getSession.useQuery(
     { sessionId: sessionId! },
@@ -89,6 +92,16 @@ export function ResultsModal({
     ? getMasteryBadgeProps(session.mastery)
     : null;
   const MasteryIcon = masteryBadgeProps?.icon ?? AlertCircle;
+
+  const handleGoHome = () => {
+    onOpenChange(false);
+    router.push("/app");
+  };
+
+  const handleAnotherProblem = () => {
+    onOpenChange(false);
+    router.push("/app/whiteboard");
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -234,8 +247,11 @@ export function ResultsModal({
             </div>
           )}
         </div>
-        <div className="flex justify-end">
-          <Button onClick={() => onOpenChange(false)}>Close</Button>
+        <div className="flex justify-end gap-2">
+          <Button onClick={handleGoHome} variant="outline">
+            Go Home
+          </Button>
+          <Button onClick={handleAnotherProblem}>Another Problem</Button>
         </div>
       </DialogContent>
     </Dialog>

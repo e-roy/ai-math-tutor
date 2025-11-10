@@ -47,6 +47,15 @@ export function WhiteboardClient() {
   // Results modal state
   const [isResultsModalOpen, setIsResultsModalOpen] = useState(false);
 
+  // Track previous modal state to detect when it closes
+  const prevModalOpenRef = useRef(false);
+
+  // Track previous problemText to detect when it's generated
+  const prevProblemTextRef = useRef<string>("");
+
+  // Track if we've already handled "Very good!" for current problem
+  const hasHandledSuccessRef = useRef(false);
+
   // Trigger message for AI chat (e.g., when whiteboard is submitted)
   const [triggerMessage, setTriggerMessage] = useState<string | null>(null);
 
@@ -151,11 +160,54 @@ export function WhiteboardClient() {
         timerIntervalRef.current = null;
       }
       timerStartRef.current = null;
+      prevProblemTextRef.current = "";
+      hasHandledSuccessRef.current = false;
     }
   }, [selectedConversationId]);
 
-  // Track previous modal state to detect when it closes
-  const prevModalOpenRef = useRef(isResultsModalOpen);
+  // Auto-start timer when problem is generated
+  useEffect(() => {
+    const wasEmpty = !prevProblemTextRef.current.trim();
+    const isNowSet = problemText.trim().length > 0;
+
+    // Only auto-start if problemText changed from empty to non-empty
+    // and timer is not already running
+    if (wasEmpty && isNowSet && !isTimerRunning && selectedConversationId) {
+      handleStartPractice();
+    }
+
+    // Update ref for next render
+    prevProblemTextRef.current = problemText;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [problemText, isTimerRunning, selectedConversationId]);
+
+  // Detect "Very good!" message and auto-stop
+  useEffect(() => {
+    if (
+      !isTimerRunning ||
+      hasHandledSuccessRef.current ||
+      !selectedConversationId
+    ) {
+      return;
+    }
+
+    // Check last assistant turn for "Very good!" message
+    const assistantTurns = chatTurns.filter(
+      (turn) => turn.role === "assistant",
+    );
+    if (assistantTurns.length === 0) return;
+
+    const lastAssistantTurn = assistantTurns[assistantTurns.length - 1];
+    if (!lastAssistantTurn?.text) return;
+
+    // Check if the message contains "Very good!" (case-insensitive)
+    const messageText = lastAssistantTurn.text.trim();
+    if (messageText.toLowerCase().includes("very good!")) {
+      hasHandledSuccessRef.current = true;
+      void handleFinishSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatTurns, isTimerRunning, selectedConversationId]);
 
   // Generate new problem when results modal closes after completion
   useEffect(() => {
@@ -202,6 +254,8 @@ export function WhiteboardClient() {
             timerIntervalRef.current = null;
           }
           timerStartRef.current = null;
+          prevProblemTextRef.current = "";
+          hasHandledSuccessRef.current = false;
         } catch (error) {
           console.error("Failed to generate new problem:", error);
           // Fallback to default problem
@@ -231,6 +285,8 @@ export function WhiteboardClient() {
           setHintsCount(0);
           setElapsedTimeMs(0);
           setChatTurns([]);
+          prevProblemTextRef.current = "";
+          hasHandledSuccessRef.current = false;
         }
       };
 
@@ -464,8 +520,6 @@ export function WhiteboardClient() {
           <ProblemHeader
             isTimerRunning={isTimerRunning}
             elapsedTimeMs={elapsedTimeMs}
-            onStartPractice={handleStartPractice}
-            onFinishSubmit={handleFinishSubmit}
             onProblemChange={setProblemText}
           />
           <WhiteboardPanel

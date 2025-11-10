@@ -107,11 +107,11 @@ export function EphemeralChatPane({
   ]);
 
   // Handle triggerMessage from parent (e.g., whiteboard submit)
+  // Allow processing even while streaming to enable re-submissions
   useEffect(() => {
     if (
       triggerMessage?.trim() &&
       triggerMessage !== lastTriggerMessageRef.current &&
-      !isStreaming &&
       conversationId
     ) {
       // Mark this message as processed
@@ -150,7 +150,7 @@ export function EphemeralChatPane({
       });
       setSubscriptionEnabled(true);
     }
-  }, [triggerMessage, isStreaming, conversationId, turns, onTurnsChange]);
+  }, [triggerMessage, conversationId, turns, onTurnsChange]);
 
   // Set up subscription with ephemeral flag
   api.ai.tutorTurn.useSubscription(
@@ -196,6 +196,8 @@ export function EphemeralChatPane({
           // Disable subscription after completion
           setSubscriptionEnabled(false);
           setSubscriptionInput(null);
+          // Reset lastTriggerMessageRef to allow re-submission of the same answer
+          lastTriggerMessageRef.current = null;
         }
       },
       onError: (error) => {
@@ -205,6 +207,8 @@ export function EphemeralChatPane({
         setStreamingTurnType(null);
         setSubscriptionEnabled(false);
         setSubscriptionInput(null);
+        // Reset lastTriggerMessageRef to allow re-submission after error
+        lastTriggerMessageRef.current = null;
       },
     },
   );
