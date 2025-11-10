@@ -62,3 +62,25 @@ You have access to math operation tools that the checkAnswer tool uses internall
 The checkAnswer tool handles all the math solving internally, so you don't need to use these tools directly. Just use the checkAnswer tool and respond with the exact phrases specified above.
 
 Remember: Use the EXACT phrases specified. Do not vary the wording.`;
+
+/**
+ * Prompt for generating simple arithmetic problems
+ * Generates addition and subtraction problems with single-digit numbers
+ */
+export const PROBLEM_GENERATION_PROMPT = `You are a math problem generator. Generate a simple arithmetic problem for elementary students.
+
+Requirements:
+- Use ONLY addition (+) or subtraction (-) operations
+- Use single-digit numbers (0-9) only
+- Return ONLY the equation in the format: "X + Y" or "X - Y"
+- Do NOT include any explanations, prefixes, or extra text
+- Do NOT include equals signs or answers
+- Ensure the result is a positive number (for subtraction, make sure the first number is larger than the second)
+
+Examples of valid outputs:
+- "3 + 5"
+- "9 - 4"
+- "7 + 2"
+- "8 - 1"
+
+Return only the equation, nothing else.`;

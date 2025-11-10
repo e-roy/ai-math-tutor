@@ -144,7 +144,17 @@ export function ResultsModal({
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground text-xs">Attempts</p>
-                  <p className="text-sm font-semibold">{session.attempts}</p>
+                  <div className="space-y-0.5">
+                    <p className="text-xs text-muted-foreground">
+                      Chat: {session.chatAttempts ?? 0}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Board: {session.boardAttempts ?? 0}
+                    </p>
+                    <p className="text-sm font-semibold">
+                      Total: {(session.chatAttempts ?? 0) + (session.boardAttempts ?? 0)}
+                    </p>
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground text-xs">Hints Used</p>

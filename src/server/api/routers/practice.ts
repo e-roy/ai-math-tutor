@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
 import { TRPCError } from "@trpc/server";
+import { evaluate } from "mathjs";
 
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import {
@@ -12,6 +15,7 @@ import {
 } from "@/server/db/practice";
 import { conversations } from "@/server/db/schema";
 import { computeScore, extractExpectedAnswer } from "@/lib/grading/equivalence";
+import { PROBLEM_GENERATION_PROMPT } from "@/lib/ai/prompts";
 import type { PracticeSession } from "@/types/practice";
 
 export const practiceRouter = createTRPCRouter({
@@ -20,7 +24,9 @@ export const practiceRouter = createTRPCRouter({
       z.object({
         conversationId: z.string().uuid().optional().nullable(),
         rawProblemText: z.string().min(1),
-        attempts: z.number().int().min(0),
+        attempts: z.number().int().min(0).optional(), // Deprecated: use chatAttempts + boardAttempts
+        chatAttempts: z.number().int().min(0),
+        boardAttempts: z.number().int().min(0),
         hintsUsed: z.number().int().min(0),
         timeOnTaskMs: z.number().int().min(0),
         studentAnswer: z.string().optional().nullable(),
@@ -56,16 +62,19 @@ export const practiceRouter = createTRPCRouter({
       }
 
       // Extract expected answer from problem text if not provided
-      let expectedAnswer = input.expectedAnswer;
-      if (!expectedAnswer) {
-        expectedAnswer = extractExpectedAnswer(input.rawProblemText) ?? null;
-      }
+      const expectedAnswer =
+        input.expectedAnswer ??
+        extractExpectedAnswer(input.rawProblemText) ??
+        null;
+
+      // Compute total attempts for scoring (chat + board)
+      const totalAttempts = input.chatAttempts + input.boardAttempts;
 
       // Compute score and mastery using grading helper
       const gradingResult = computeScore(
         input.studentAnswer ?? null,
         expectedAnswer ?? null,
-        input.attempts,
+        totalAttempts,
         input.hintsUsed,
       );
 
@@ -74,7 +83,9 @@ export const practiceRouter = createTRPCRouter({
         userId,
         conversationId: input.conversationId ?? null,
         rawProblemText: input.rawProblemText,
-        attempts: input.attempts,
+        attempts: input.attempts ?? totalAttempts, // Backward compatibility
+        chatAttempts: input.chatAttempts,
+        boardAttempts: input.boardAttempts,
         hintsUsed: input.hintsUsed,
         timeOnTaskMs: input.timeOnTaskMs,
         completion: true,
@@ -118,11 +129,18 @@ export const practiceRouter = createTRPCRouter({
       const studentAnswer =
         input.studentAnswer ?? existingSession.studentAnswer;
 
+      // Calculate total attempts (use new fields if available, fallback to old field)
+      const totalAttempts =
+        existingSession.chatAttempts !== undefined &&
+        existingSession.boardAttempts !== undefined
+          ? existingSession.chatAttempts + existingSession.boardAttempts
+          : (existingSession.attempts ?? 0);
+
       // Recompute score and mastery with updated answer
       const gradingResult = computeScore(
         studentAnswer,
         existingSession.expectedAnswer,
-        existingSession.attempts,
+        totalAttempts,
         existingSession.hintsUsed,
       );
 
@@ -132,8 +150,7 @@ export const practiceRouter = createTRPCRouter({
         .set({
           studentAnswer: studentAnswer,
           boardSnapshotBlobRef:
-            input.boardSnapshotBlobRef ??
-            existingSession.boardSnapshotBlobRef,
+            input.boardSnapshotBlobRef ?? existingSession.boardSnapshotBlobRef,
           score: gradingResult.score.toString(),
           mastery: gradingResult.mastery,
           notes: gradingResult.reason,
@@ -232,5 +249,79 @@ export const practiceRouter = createTRPCRouter({
 
     return sessions;
   }),
-});
 
+  generateProblem: protectedProcedure.mutation(async () => {
+    // Default fallback problem if AI generation fails
+    const defaultProblem = "3 + 4";
+
+    try {
+      // Generate problem using OpenAI
+      const response = await generateText({
+        model: openai("gpt-4o-mini"),
+        messages: [
+          {
+            role: "system",
+            content: PROBLEM_GENERATION_PROMPT,
+          },
+          {
+            role: "user",
+            content: "Generate a simple addition or subtraction problem.",
+          },
+        ],
+        temperature: 0.7, // Some randomness for variety
+      });
+
+      const generatedText = response.text.trim();
+
+      if (!generatedText) {
+        console.warn("AI generated empty problem, using default");
+        return { problemText: defaultProblem };
+      }
+
+      // Clean up the response - remove any extra text
+      // Extract just the equation pattern (e.g., "3 + 5" or "9 - 4")
+      const equationRegex = /(\d+\s*[+-]\s*\d+)/;
+      const equationMatch = equationRegex.exec(generatedText);
+      const problemText = equationMatch?.[1]
+        ? equationMatch[1].replace(/\s+/g, " ").trim()
+        : generatedText.replace(/[^0-9+\-\s]/g, "").trim();
+
+      if (!problemText) {
+        console.warn(
+          "Could not extract equation from AI response, using default",
+        );
+        return { problemText: defaultProblem };
+      }
+
+      // Validate that the problem can be evaluated with mathjs
+      try {
+        const result: unknown = evaluate(problemText);
+        if (
+          typeof result === "number" &&
+          !isNaN(result) &&
+          isFinite(result) &&
+          result >= 0
+        ) {
+          // Valid problem - return it
+          return { problemText };
+        } else {
+          console.warn(
+            `Problem "${problemText}" evaluated to invalid result: ${String(result)}, using default`,
+          );
+          return { problemText: defaultProblem };
+        }
+      } catch (evalError) {
+        const errorMessage =
+          evalError instanceof Error ? evalError.message : String(evalError);
+        console.warn(
+          `Problem "${problemText}" could not be evaluated: ${errorMessage}, using default`,
+        );
+        return { problemText: defaultProblem };
+      }
+    } catch (error) {
+      console.error("Failed to generate problem with AI:", error);
+      // Return default problem on any error
+      return { problemText: defaultProblem };
+    }
+  }),
+});

@@ -15,6 +15,7 @@ import { useChatStore } from "@/store/useChatStore";
 import { useChildStore } from "@/store/useChildStore";
 import type { Turn } from "@/server/db/turns";
 import { extractExpectedAnswer } from "@/lib/grading/equivalence";
+import { createEmptyScene } from "@/lib/whiteboard/scene-adapters";
 import { put } from "@vercel/blob";
 
 export function WhiteboardClient() {
@@ -31,7 +32,8 @@ export function WhiteboardClient() {
   const [problemText, setProblemText] = useState<string>("");
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [elapsedTimeMs, setElapsedTimeMs] = useState(0);
-  const [attemptsCount, setAttemptsCount] = useState(0);
+  const [chatAttemptsCount, setChatAttemptsCount] = useState(0);
+  const [boardAttemptsCount, setBoardAttemptsCount] = useState(0);
   const [hintsCount, setHintsCount] = useState(0);
   const [chatTurns, setChatTurns] = useState<Turn[]>([]);
 
@@ -51,6 +53,8 @@ export function WhiteboardClient() {
   // tRPC mutations and queries
   const createSession = api.practice.createSession.useMutation();
   const getUploadUrl = api.files.getUploadUrl.useMutation();
+  const generateProblem = api.practice.generateProblem.useMutation();
+  const saveBoard = api.board.save.useMutation();
   const utils = api.useUtils();
 
   const createConversation = api.conversations.create.useMutation({
@@ -136,7 +140,8 @@ export function WhiteboardClient() {
       setProblemText("");
       setIsTimerRunning(false);
       setElapsedTimeMs(0);
-      setAttemptsCount(0);
+      setChatAttemptsCount(0);
+      setBoardAttemptsCount(0);
       setHintsCount(0);
       setChatTurns([]);
       setSessionId(null);
@@ -148,6 +153,94 @@ export function WhiteboardClient() {
       timerStartRef.current = null;
     }
   }, [selectedConversationId]);
+
+  // Track previous modal state to detect when it closes
+  const prevModalOpenRef = useRef(isResultsModalOpen);
+
+  // Generate new problem when results modal closes after completion
+  useEffect(() => {
+    // Only generate if modal was open and is now closed, and we have a sessionId (meaning we just completed a problem)
+    const wasOpen = prevModalOpenRef.current;
+    const isNowClosed = !isResultsModalOpen;
+
+    if (wasOpen && isNowClosed && sessionId) {
+      const generateNewProblem = async () => {
+        try {
+          const result = await generateProblem.mutateAsync();
+          const newProblem = result.problemText;
+          setProblemText(newProblem);
+
+          // Clear the board by saving an empty scene
+          if (selectedConversationId) {
+            try {
+              // Get current board to get the version
+              const boardData = await utils.board.get.fetch({
+                conversationId: selectedConversationId,
+              });
+
+              const emptyScene = createEmptyScene();
+              await saveBoard.mutateAsync({
+                conversationId: selectedConversationId,
+                scene: emptyScene,
+                version: boardData?.version ?? 1,
+              });
+            } catch (error) {
+              // Log error but don't block problem generation
+              console.warn("Failed to clear board:", error);
+            }
+          }
+
+          // Reset practice session state for new problem
+          setSessionId(null);
+          setChatAttemptsCount(0);
+          setBoardAttemptsCount(0);
+          setHintsCount(0);
+          setElapsedTimeMs(0);
+          setChatTurns([]);
+          if (timerIntervalRef.current) {
+            clearInterval(timerIntervalRef.current);
+            timerIntervalRef.current = null;
+          }
+          timerStartRef.current = null;
+        } catch (error) {
+          console.error("Failed to generate new problem:", error);
+          // Fallback to default problem
+          const fallback = "3 + 4";
+          setProblemText(fallback);
+
+          // Still try to clear the board even on error
+          if (selectedConversationId) {
+            try {
+              const boardData = await utils.board.get.fetch({
+                conversationId: selectedConversationId,
+              });
+              const emptyScene = createEmptyScene();
+              await saveBoard.mutateAsync({
+                conversationId: selectedConversationId,
+                scene: emptyScene,
+                version: boardData?.version ?? 1,
+              });
+            } catch (boardError) {
+              console.warn("Failed to clear board:", boardError);
+            }
+          }
+
+          setSessionId(null);
+          setChatAttemptsCount(0);
+          setBoardAttemptsCount(0);
+          setHintsCount(0);
+          setElapsedTimeMs(0);
+          setChatTurns([]);
+        }
+      };
+
+      void generateNewProblem();
+    }
+
+    // Update ref for next render
+    prevModalOpenRef.current = isResultsModalOpen;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isResultsModalOpen, sessionId]);
 
   // Show loading state while checking if child data is available
   if (currentChildId && isTutorPersonaLoading) {
@@ -177,6 +270,7 @@ export function WhiteboardClient() {
    * Extract student answer from chat turns
    * Looks for explicit answer markers first, then falls back to last user turn with math content
    * Prefers LaTeX if available, otherwise uses text
+   * Handles simple numeric answers like "3" or "The answer is 3"
    */
   const extractStudentAnswer = (turns: Turn[]): string | null => {
     const userTurns = turns.filter((turn) => turn.role === "user");
@@ -204,7 +298,8 @@ export function WhiteboardClient() {
             const extracted = match[1].trim();
             // Remove trailing punctuation that might be part of the sentence
             const cleaned = extracted.replace(/[.,;!?]+$/, "").trim();
-            if (cleaned) {
+            // Skip if the extracted value is empty or just whitespace
+            if (cleaned && cleaned.length > 0) {
               // Prefer LaTeX if available for this turn
               if (turn.latex?.trim()) {
                 return turn.latex.trim();
@@ -212,6 +307,17 @@ export function WhiteboardClient() {
               return cleaned;
             }
           }
+        }
+
+        // Also check if the text is just a number (simple answer like "3")
+        // This handles cases where user just types the number without any markers
+        const numericMatch = /^\s*(\d+(?:\.\d+)?)\s*$/.exec(turn.text.trim());
+        if (numericMatch?.[1]) {
+          // Prefer LaTeX if available
+          if (turn.latex?.trim()) {
+            return turn.latex.trim();
+          }
+          return numericMatch[1];
         }
       }
     }
@@ -225,9 +331,15 @@ export function WhiteboardClient() {
       return lastUserTurn.latex.trim();
     }
 
-    // Fall back to text
+    // Fall back to text - check if it's a simple number
     if (lastUserTurn.text?.trim()) {
-      return lastUserTurn.text.trim();
+      const text = lastUserTurn.text.trim();
+      // Check if it's just a number
+      const numericMatch = /^\s*(\d+(?:\.\d+)?)\s*$/.exec(text);
+      if (numericMatch?.[1]) {
+        return numericMatch[1];
+      }
+      return text;
     }
 
     return null;
@@ -246,8 +358,8 @@ export function WhiteboardClient() {
   ) => {
     if (!selectedConversationId || !isTimerRunning) return;
 
-    // Track attempt
-    setAttemptsCount((prev) => prev + 1);
+    // Track board attempt
+    setBoardAttemptsCount((prev) => prev + 1);
 
     // Trigger AI response by sending a message with the extracted answer
     // Use standard answer format that AI recognizes to trigger checkAnswer tool
@@ -319,7 +431,8 @@ export function WhiteboardClient() {
       const session = await createSession.mutateAsync({
         conversationId: selectedConversationId,
         rawProblemText: problemText,
-        attempts: attemptsCount,
+        chatAttempts: chatAttemptsCount,
+        boardAttempts: boardAttemptsCount,
         hintsUsed: hintsCount,
         timeOnTaskMs: elapsedTimeMs,
         studentAnswer: studentAnswer,
@@ -368,7 +481,7 @@ export function WhiteboardClient() {
         problemText={problemText}
         isPracticeActive={isTimerRunning}
         onHintUsed={() => setHintsCount((prev) => prev + 1)}
-        onAttempt={() => setAttemptsCount((prev) => prev + 1)}
+        onChatAttempt={() => setChatAttemptsCount((prev) => prev + 1)}
         onTurnsChange={setChatTurns}
         triggerMessage={triggerMessage}
       />

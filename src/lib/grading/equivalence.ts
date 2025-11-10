@@ -3,10 +3,13 @@ import {
   type EquivalenceResult,
 } from "@/lib/math/equivalence";
 import type { GradingResult } from "@/types/practice";
+import { evaluate } from "mathjs";
 
 /**
  * Extract expected answer from problem text if structured
  * Looks for patterns like "answer: 5", "answer = 5", "solution: x=4", etc.
+ * If no pattern matches, tries to evaluate the problem text as a math expression
+ * (e.g., "6 - 3" → "3")
  */
 export function extractExpectedAnswer(problemText: string): string | null {
   const text = problemText.trim().toLowerCase();
@@ -30,6 +33,34 @@ export function extractExpectedAnswer(problemText: string): string | null {
   const match3 = solvePattern.exec(text);
   if (match3?.[1]) {
     return match3[1].trim();
+  }
+
+  // If no pattern matches, try evaluating the problem text as a math expression
+  // This handles simple arithmetic problems like "6 - 3", "2 + 5", etc.
+  try {
+    // Clean the problem text - remove common question prefixes
+    let expression = problemText.trim();
+    expression = expression
+      .replace(
+        /^(what is|what's|solve|calculate|compute|find|evaluate)\s*:?\s*/i,
+        "",
+      )
+      .replace(/[?.,!]+$/, "")
+      .trim();
+
+    // Try to evaluate the expression
+    const result = evaluate(expression);
+    if (
+      typeof result === "number" &&
+      !isNaN(result) &&
+      isFinite(result)
+    ) {
+      // Return the result as a string
+      return result.toString();
+    }
+  } catch (error) {
+    // If evaluation fails, it's not a simple arithmetic expression
+    // Return null to indicate no expected answer could be extracted
   }
 
   return null;

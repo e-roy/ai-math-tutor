@@ -21,7 +21,9 @@ export const practiceSessions = createTable(
     problemId: d.uuid(),
     conversationId: d.uuid().references(() => conversations.id),
     rawProblemText: d.text().notNull(),
-    attempts: d.integer().default(0).notNull(),
+    attempts: d.integer().default(0).notNull(), // Deprecated: use chatAttempts + boardAttempts
+    chatAttempts: d.integer().default(0).notNull(),
+    boardAttempts: d.integer().default(0).notNull(),
     hintsUsed: d.integer().default(0).notNull(),
     timeOnTaskMs: d.integer().notNull(),
     completion: d.boolean().default(false).notNull(),
@@ -49,7 +51,9 @@ export interface PracticeSessionRecord {
   problemId: string | null;
   conversationId: string | null;
   rawProblemText: string;
-  attempts: number;
+  attempts?: number; // Deprecated: use chatAttempts + boardAttempts
+  chatAttempts: number;
+  boardAttempts: number;
   hintsUsed: number;
   timeOnTaskMs: number;
   completion: boolean;
@@ -65,7 +69,9 @@ export interface CreatePracticeSessionParams {
   userId: string;
   conversationId?: string | null;
   rawProblemText: string;
-  attempts: number;
+  attempts?: number; // Deprecated: use chatAttempts + boardAttempts
+  chatAttempts: number;
+  boardAttempts: number;
   hintsUsed: number;
   timeOnTaskMs: number;
   completion?: boolean;
@@ -90,7 +96,9 @@ export async function createPracticeSession(
       userId: params.userId,
       conversationId: params.conversationId ?? null,
       rawProblemText: params.rawProblemText,
-      attempts: params.attempts,
+      attempts: params.attempts ?? params.chatAttempts + params.boardAttempts, // Backward compatibility
+      chatAttempts: params.chatAttempts,
+      boardAttempts: params.boardAttempts,
       hintsUsed: params.hintsUsed,
       timeOnTaskMs: params.timeOnTaskMs,
       completion: params.completion ?? false,
@@ -118,6 +126,8 @@ export async function createPracticeSession(
     conversationId: result.conversationId,
     rawProblemText: result.rawProblemText,
     attempts: result.attempts,
+    chatAttempts: result.chatAttempts,
+    boardAttempts: result.boardAttempts,
     hintsUsed: result.hintsUsed,
     timeOnTaskMs: result.timeOnTaskMs,
     completion: result.completion,
@@ -158,6 +168,8 @@ export async function getPracticeSessionById(
     conversationId: result.conversationId as string | null,
     rawProblemText: result.rawProblemText as string,
     attempts: result.attempts as number,
+    chatAttempts: (result.chatAttempts as number) ?? 0,
+    boardAttempts: (result.boardAttempts as number) ?? 0,
     hintsUsed: result.hintsUsed as number,
     timeOnTaskMs: result.timeOnTaskMs as number,
     completion: result.completion as boolean,
@@ -191,6 +203,8 @@ export async function getPracticeSessionsByUser(
     conversationId: result.conversationId as string | null,
     rawProblemText: result.rawProblemText as string,
     attempts: result.attempts as number,
+    chatAttempts: (result.chatAttempts as number) ?? 0,
+    boardAttempts: (result.boardAttempts as number) ?? 0,
     hintsUsed: result.hintsUsed as number,
     timeOnTaskMs: result.timeOnTaskMs as number,
     completion: result.completion as boolean,
@@ -227,6 +241,8 @@ export async function getPracticeSessionsByConversation(
     conversationId: result.conversationId as string | null,
     rawProblemText: result.rawProblemText as string,
     attempts: result.attempts as number,
+    chatAttempts: (result.chatAttempts as number) ?? 0,
+    boardAttempts: (result.boardAttempts as number) ?? 0,
     hintsUsed: result.hintsUsed as number,
     timeOnTaskMs: result.timeOnTaskMs as number,
     completion: result.completion as boolean,

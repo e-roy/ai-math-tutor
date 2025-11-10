@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Play, Square } from "lucide-react";
+import { api } from "@/trpc/react";
 
 interface ProblemHeaderProps {
   isTimerRunning: boolean;
@@ -35,12 +36,32 @@ export function ProblemHeader({
   onFinishSubmit,
   onProblemChange,
 }: ProblemHeaderProps) {
-  // Hardcoded problem for now - will be replaced with AI generation later
-  const problemText = "2 + 2";
+  const [problemText, setProblemText] = useState<string>("");
+  const [isGenerating, setIsGenerating] = useState(true);
+
+  const generateProblem = api.practice.generateProblem.useMutation();
 
   // Generate problem on mount and notify parent
   useEffect(() => {
-    onProblemChange(problemText);
+    const fetchProblem = async () => {
+      setIsGenerating(true);
+      try {
+        const result = await generateProblem.mutateAsync();
+        const newProblem = result.problemText;
+        setProblemText(newProblem);
+        onProblemChange(newProblem);
+      } catch (error) {
+        console.error("Failed to generate problem:", error);
+        // Fallback to default problem
+        const fallback = "3 + 4";
+        setProblemText(fallback);
+        onProblemChange(fallback);
+      } finally {
+        setIsGenerating(false);
+      }
+    };
+
+    void fetchProblem();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Only run once on mount
 
@@ -50,7 +71,11 @@ export function ProblemHeader({
         <div className="flex-1 space-y-2">
           <div className="space-y-2">
             <h3 className="text-sm font-medium">Problem:</h3>
-            <p className="text-muted-foreground text-sm">{problemText}</p>
+            {isGenerating ? (
+              <p className="text-muted-foreground text-sm">Generating problem...</p>
+            ) : (
+              <p className="text-muted-foreground text-sm">{problemText}</p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-3">

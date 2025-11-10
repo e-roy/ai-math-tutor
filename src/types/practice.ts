@@ -13,7 +13,9 @@ export interface PracticeSession {
   problemId: string | null;
   conversationId: string | null;
   rawProblemText: string;
-  attempts: number;
+  attempts: number; // Deprecated: use chatAttempts + boardAttempts
+  chatAttempts: number;
+  boardAttempts: number;
   hintsUsed: number;
   timeOnTaskMs: number;
   completion: boolean;

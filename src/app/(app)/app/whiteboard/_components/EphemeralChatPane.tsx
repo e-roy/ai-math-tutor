@@ -14,7 +14,7 @@ interface EphemeralChatPaneProps {
   problemText?: string;
   isPracticeActive?: boolean;
   onHintUsed?: () => void;
-  onAttempt?: () => void;
+  onChatAttempt?: () => void;
   onTurnsChange?: (turns: Turn[]) => void;
   triggerMessage?: string | null;
 }
@@ -28,7 +28,7 @@ export function EphemeralChatPane({
   problemText,
   isPracticeActive,
   onHintUsed,
-  onAttempt,
+  onChatAttempt,
   onTurnsChange,
   triggerMessage,
 }: EphemeralChatPaneProps) {
@@ -216,9 +216,9 @@ export function EphemeralChatPane({
     const userText = input.trim();
     setInput("");
 
-    // Track attempt
-    if (onAttempt) {
-      onAttempt();
+    // Track chat attempt
+    if (onChatAttempt) {
+      onChatAttempt();
     }
 
     // Create user turn immediately (optimistic update, ephemeral)

@@ -13,7 +13,7 @@ interface WhiteboardChatSidebarProps {
   problemText: string;
   isPracticeActive: boolean;
   onHintUsed: () => void;
-  onAttempt: () => void;
+  onChatAttempt: () => void;
   onTurnsChange: (turns: Turn[]) => void;
   triggerMessage?: string | null;
 }
@@ -27,7 +27,7 @@ export function WhiteboardChatSidebar({
   problemText,
   isPracticeActive,
   onHintUsed,
-  onAttempt,
+  onChatAttempt,
   onTurnsChange,
   triggerMessage,
 }: WhiteboardChatSidebarProps) {
@@ -44,7 +44,7 @@ export function WhiteboardChatSidebar({
           problemText={problemText}
           isPracticeActive={isPracticeActive}
           onHintUsed={onHintUsed}
-          onAttempt={onAttempt}
+          onChatAttempt={onChatAttempt}
           onTurnsChange={onTurnsChange}
           triggerMessage={triggerMessage}
         />
