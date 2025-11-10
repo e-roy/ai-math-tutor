@@ -13,13 +13,12 @@ import { Badge } from "@/components/ui/badge";
 import { api } from "@/trpc/react";
 import { MathRenderer } from "../../conversation/_components/MathRenderer";
 import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import { usePracticeStore } from "@/store/usePracticeStore";
+import { createEmptyScene } from "@/lib/whiteboard/scene-adapters";
+import { useState } from "react";
 
 interface ResultsModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   conversationId: string;
-  timeOnTaskMs: number;
-  sessionId?: string;
 }
 
 /**
@@ -73,14 +72,20 @@ function getMasteryBadgeProps(mastery: "low" | "medium" | "high" | null) {
 /**
  * ResultsModal component - displays practice session results
  */
-export function ResultsModal({
-  open,
-  onOpenChange,
-  conversationId,
-  timeOnTaskMs,
-  sessionId,
-}: ResultsModalProps) {
+export function ResultsModal({ conversationId }: ResultsModalProps) {
   const router = useRouter();
+  const [isGeneratingNext, setIsGeneratingNext] = useState(false);
+
+  const open = usePracticeStore((state) => state.isResultsModalOpen);
+  const closeResultsModal = usePracticeStore((state) => state.closeResultsModal);
+  const sessionId = usePracticeStore((state) => state.sessionId);
+  const timeOnTaskMs = usePracticeStore((state) => state.elapsedTimeMs);
+  const setProblemText = usePracticeStore((state) => state.setProblemText);
+  const resetSession = usePracticeStore((state) => state.resetSession);
+
+  const generateProblem = api.practice.generateProblem.useMutation();
+  const saveBoard = api.board.save.useMutation();
+  const utils = api.useUtils();
 
   // Fetch practice session if sessionId provided
   const { data: session, isLoading } = api.practice.getSession.useQuery(
@@ -94,17 +99,61 @@ export function ResultsModal({
   const MasteryIcon = masteryBadgeProps?.icon ?? AlertCircle;
 
   const handleGoHome = () => {
-    onOpenChange(false);
+    closeResultsModal();
     router.push("/app");
   };
 
-  const handleAnotherProblem = () => {
-    onOpenChange(false);
-    router.push("/app/whiteboard");
+  const handleAnotherProblem = async () => {
+    setIsGeneratingNext(true);
+    
+    try {
+      // Generate new problem
+      const result = await generateProblem.mutateAsync();
+      setProblemText(result.problemText);
+
+      // Clear the board
+      try {
+        const boardData = await utils.board.get.fetch({ conversationId });
+        const emptyScene = createEmptyScene();
+        await saveBoard.mutateAsync({
+          conversationId,
+          scene: emptyScene,
+          version: boardData?.version ?? 1,
+        });
+      } catch (error) {
+        console.warn("Failed to clear board:", error);
+      }
+
+      // Reset session state
+      resetSession();
+      closeResultsModal();
+    } catch (error) {
+      console.error("Failed to generate new problem:", error);
+      // Fallback
+      setProblemText("3 + 4");
+      
+      // Still try to clear board
+      try {
+        const boardData = await utils.board.get.fetch({ conversationId });
+        const emptyScene = createEmptyScene();
+        await saveBoard.mutateAsync({
+          conversationId,
+          scene: emptyScene,
+          version: boardData?.version ?? 1,
+        });
+      } catch (boardError) {
+        console.warn("Failed to clear board:", boardError);
+      }
+
+      resetSession();
+      closeResultsModal();
+    } finally {
+      setIsGeneratingNext(false);
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={closeResultsModal}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>Practice Session Results</DialogTitle>
@@ -248,10 +297,12 @@ export function ResultsModal({
           )}
         </div>
         <div className="flex justify-end gap-2">
-          <Button onClick={handleGoHome} variant="outline">
+          <Button onClick={handleGoHome} variant="outline" disabled={isGeneratingNext}>
             Go Home
           </Button>
-          <Button onClick={handleAnotherProblem}>Another Problem</Button>
+          <Button onClick={handleAnotherProblem} disabled={isGeneratingNext}>
+            {isGeneratingNext ? "Generating..." : "Another Problem"}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

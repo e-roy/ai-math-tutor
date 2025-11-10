@@ -5,15 +5,14 @@ import dynamic from "next/dynamic";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import { api } from "@/trpc/react";
+import { usePracticeStore } from "@/store/usePracticeStore";
 
 // Dynamically import Whiteboard to avoid SSR issues with Excalidraw
 const DynamicWhiteboard = dynamic(
   () =>
-    import("@/app/(app)/app/whiteboard/_components/Whiteboard").then(
-      (mod) => ({
-        default: mod.Whiteboard,
-      }),
-    ),
+    import("@/app/(app)/app/whiteboard/_components/Whiteboard").then((mod) => ({
+      default: mod.Whiteboard,
+    })),
   {
     ssr: false,
     loading: () => (
@@ -26,9 +25,6 @@ const DynamicWhiteboard = dynamic(
 
 interface WhiteboardPanelProps {
   conversationId: string;
-  problemText: string;
-  isPracticeActive: boolean;
-  onSubmit: (isCorrect: boolean, extractedAnswer: string) => void;
 }
 
 /**
@@ -37,29 +33,40 @@ interface WhiteboardPanelProps {
  * - Large Excalidraw whiteboard (main focus)
  * - Submit button to check whiteboard answer
  */
-export function WhiteboardPanel({
-  conversationId,
-  problemText,
-  isPracticeActive,
-  onSubmit,
-}: WhiteboardPanelProps) {
+export function WhiteboardPanel({ conversationId }: WhiteboardPanelProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const problemText = usePracticeStore((state) => state.problemText);
+  const isTimerRunning = usePracticeStore((state) => state.isTimerRunning);
+  const incrementBoardAttempts = usePracticeStore(
+    (state) => state.incrementBoardAttempts,
+  );
+  const setTriggerMessage = usePracticeStore(
+    (state) => state.setTriggerMessage,
+  );
 
   const checkAnswerMutation = api.board.checkWhiteboardAnswer.useMutation({
     onSuccess: (result) => {
       setIsSubmitting(false);
-      onSubmit(result.isCorrect, result.extractedAnswer ?? "");
+      incrementBoardAttempts();
+
+      // Trigger AI response by sending a message with the extracted answer
+      const submissionMessage = `The answer is ${result.extractedAnswer ?? ""}`;
+      setTriggerMessage(submissionMessage);
+
+      // Clear trigger message after a short delay
+      setTimeout(() => {
+        setTriggerMessage(null);
+      }, 100);
     },
     onError: (error) => {
       console.error("Failed to check whiteboard answer:", error);
       setIsSubmitting(false);
-      // Treat errors as incorrect
-      onSubmit(false, "");
     },
   });
 
   const handleSubmit = () => {
-    if (!problemText.trim() || isSubmitting || !isPracticeActive) {
+    if (!problemText.trim() || isSubmitting || !isTimerRunning) {
       return;
     }
 
@@ -77,7 +84,7 @@ export function WhiteboardPanel({
         <DynamicWhiteboard conversationId={conversationId} />
       </div>
       {/* Submit button - positioned at bottom right */}
-      {isPracticeActive && (
+      {isTimerRunning && (
         <div className="absolute right-4 bottom-4">
           <Button
             onClick={handleSubmit}

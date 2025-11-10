@@ -8,31 +8,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/MessageBubble";
 import { api } from "@/trpc/react";
 import { Send } from "lucide-react";
+import { usePracticeStore } from "@/store/usePracticeStore";
 
 interface EphemeralChatPaneProps {
   conversationId: string;
-  problemText?: string;
-  isPracticeActive?: boolean;
-  onHintUsed?: () => void;
-  onChatAttempt?: () => void;
-  onTurnsChange?: (turns: Turn[]) => void;
-  triggerMessage?: string | null;
 }
 
 /**
  * EphemeralChatPane component for whiteboard practice mode
- * Chat turns are stored in local state only and not persisted to database
+ * Chat turns are stored in the practice store
  */
-export function EphemeralChatPane({
-  conversationId,
-  problemText,
-  isPracticeActive,
-  onHintUsed,
-  onChatAttempt,
-  onTurnsChange,
-  triggerMessage,
-}: EphemeralChatPaneProps) {
-  const [turns, setTurns] = useState<Turn[]>([]);
+export function EphemeralChatPane({ conversationId }: EphemeralChatPaneProps) {
+  const problemText = usePracticeStore((state) => state.problemText);
+  const isPracticeActive = usePracticeStore((state) => state.isTimerRunning);
+  const triggerMessage = usePracticeStore((state) => state.triggerMessage);
+  const chatTurns = usePracticeStore((state) => state.chatTurns);
+  
+  const setChatTurns = usePracticeStore((state) => state.setChatTurns);
+  const incrementChatAttempts = usePracticeStore((state) => state.incrementChatAttempts);
+  const incrementHints = usePracticeStore((state) => state.incrementHints);
+
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingText, setStreamingText] = useState("");
@@ -45,18 +40,18 @@ export function EphemeralChatPane({
   // Clear turns when conversationId changes or component unmounts
   useEffect(() => {
     return () => {
-      setTurns([]);
+      setChatTurns([]);
       setInput("");
       setIsStreaming(false);
       setStreamingText("");
       setStreamingTurnType(null);
     };
-  }, [conversationId]);
+  }, [conversationId, setChatTurns]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [turns, isStreaming, streamingText]);
+  }, [chatTurns, isStreaming, streamingText]);
 
   const utils = api.useUtils();
   const [subscriptionEnabled, setSubscriptionEnabled] = useState(false);
@@ -78,7 +73,7 @@ export function EphemeralChatPane({
     if (
       isPracticeActive &&
       problemText?.trim() &&
-      turns.length === 0 &&
+      chatTurns.length === 0 &&
       !isStreaming &&
       !subscriptionEnabled
     ) {
@@ -100,13 +95,13 @@ export function EphemeralChatPane({
   }, [
     isPracticeActive,
     problemText,
-    turns.length,
+    chatTurns.length,
     isStreaming,
     subscriptionEnabled,
     conversationId,
   ]);
 
-  // Handle triggerMessage from parent (e.g., whiteboard submit)
+  // Handle triggerMessage from store (e.g., whiteboard submit)
   // Allow processing even while streaming to enable re-submissions
   useEffect(() => {
     if (
@@ -127,9 +122,8 @@ export function EphemeralChatPane({
         tool: null,
         createdAt: new Date(),
       };
-      const newTurns = [...turns, userTurn];
-      setTurns(newTurns);
-      onTurnsChange?.(newTurns);
+      const newTurns = [...chatTurns, userTurn];
+      setChatTurns(newTurns);
 
       // Start streaming
       setIsStreaming(true);
@@ -137,7 +131,7 @@ export function EphemeralChatPane({
       setStreamingTurnType(null);
 
       // Trigger subscription with ephemeral flag and conversation history
-      const historyWithoutCurrent = turns.map((turn) => ({
+      const historyWithoutCurrent = chatTurns.map((turn) => ({
         role: turn.role,
         text: turn.text,
         latex: turn.latex,
@@ -150,7 +144,7 @@ export function EphemeralChatPane({
       });
       setSubscriptionEnabled(true);
     }
-  }, [triggerMessage, conversationId, turns, onTurnsChange]);
+  }, [triggerMessage, conversationId, chatTurns, setChatTurns]);
 
   // Set up subscription with ephemeral flag
   api.ai.tutorTurn.useSubscription(
@@ -179,16 +173,15 @@ export function EphemeralChatPane({
               tool: data.turnType ? { type: data.turnType } : null,
               createdAt: new Date(),
             };
-            const newTurns = [...turns, turn];
-            setTurns(newTurns);
-            onTurnsChange?.(newTurns);
+            const newTurns = [...chatTurns, turn];
+            setChatTurns(newTurns);
             setIsStreaming(false);
             setStreamingText("");
             setStreamingTurnType(null);
 
-            // Track hints and attempts
-            if (data.turnType === "hint" && onHintUsed) {
-              onHintUsed();
+            // Track hints
+            if (data.turnType === "hint") {
+              incrementHints();
             }
           }
           // Refetch board in case annotations were added
@@ -221,9 +214,7 @@ export function EphemeralChatPane({
     setInput("");
 
     // Track chat attempt
-    if (onChatAttempt) {
-      onChatAttempt();
-    }
+    incrementChatAttempts();
 
     // Create user turn immediately (optimistic update, ephemeral)
     const userTurn: Turn = {
@@ -235,9 +226,8 @@ export function EphemeralChatPane({
       tool: null,
       createdAt: new Date(),
     };
-    const newTurns = [...turns, userTurn];
-    setTurns(newTurns);
-    onTurnsChange?.(newTurns);
+    const newTurns = [...chatTurns, userTurn];
+    setChatTurns(newTurns);
 
     // Start streaming
     setIsStreaming(true);
@@ -246,7 +236,7 @@ export function EphemeralChatPane({
 
     // Trigger subscription with ephemeral flag and conversation history
     // Exclude the current turn since it will be added by the server
-    const historyWithoutCurrent = turns.map((turn) => ({
+    const historyWithoutCurrent = chatTurns.map((turn) => ({
       role: turn.role,
       text: turn.text,
       latex: turn.latex,
@@ -263,13 +253,13 @@ export function EphemeralChatPane({
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {turns.length === 0 && !isStreaming && (
+        {chatTurns.length === 0 && !isStreaming && (
           <div className="text-muted-foreground text-center">
             Start practicing! Chat messages here are temporary and won&apos;t be
             saved.
           </div>
         )}
-        {turns.map((turn) => (
+        {chatTurns.map((turn) => (
           <MessageBubble
             key={turn.id}
             turn={turn}

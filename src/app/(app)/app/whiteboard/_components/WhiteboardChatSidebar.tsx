@@ -6,16 +6,9 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar";
 import { EphemeralChatPane } from "./EphemeralChatPane";
-import type { Turn } from "@/server/db/turns";
 
 interface WhiteboardChatSidebarProps {
   conversationId: string;
-  problemText: string;
-  isPracticeActive: boolean;
-  onHintUsed: () => void;
-  onChatAttempt: () => void;
-  onTurnsChange: (turns: Turn[]) => void;
-  triggerMessage?: string | null;
 }
 
 /**
@@ -24,12 +17,6 @@ interface WhiteboardChatSidebarProps {
  */
 export function WhiteboardChatSidebar({
   conversationId,
-  problemText,
-  isPracticeActive,
-  onHintUsed,
-  onChatAttempt,
-  onTurnsChange,
-  triggerMessage,
 }: WhiteboardChatSidebarProps) {
   return (
     <Sidebar side="right" collapsible="offcanvas">
@@ -39,15 +26,7 @@ export function WhiteboardChatSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <EphemeralChatPane
-          conversationId={conversationId}
-          problemText={problemText}
-          isPracticeActive={isPracticeActive}
-          onHintUsed={onHintUsed}
-          onChatAttempt={onChatAttempt}
-          onTurnsChange={onTurnsChange}
-          triggerMessage={triggerMessage}
-        />
+        <EphemeralChatPane conversationId={conversationId} />
       </SidebarContent>
     </Sidebar>
   );
