@@ -8,7 +8,7 @@ import {
   getMasteryByUser,
   getSkillsByDomain,
 } from "@/server/db/progress";
-import { turns, conversations } from "@/server/db/schema";
+import { turns, conversations, skills } from "@/server/db/schema";
 import { boards, boardSnapshots } from "@/server/db/schema";
 import type { Evidence } from "@/types/progress";
 
@@ -25,14 +25,44 @@ const evidenceSchema = z.object({
 export const progressRouter = createTRPCRouter({
   updateMastery: protectedProcedure
     .input(
-      z.object({
-        skillId: z.string().uuid(),
-        level: z.number().int().min(0).max(4),
-        evidence: evidenceSchema.optional(),
-      }),
+      z
+        .object({
+          skillId: z.string().uuid().optional(),
+          skillKey: z.string().optional(),
+          level: z.number().int().min(0).max(4),
+          evidence: evidenceSchema.optional(),
+        })
+        .refine((data) => data.skillId || data.skillKey, {
+          message: "Either skillId or skillKey must be provided",
+        }),
     )
     .mutation(async ({ input, ctx }) => {
       const userId = ctx.session.user.id;
+
+      // Resolve skillKey to skillId if needed
+      let skillId = input.skillId;
+      if (!skillId && input.skillKey) {
+        const [skill] = await ctx.db
+          .select({ id: skills.id })
+          .from(skills)
+          .where(eq(skills.key, input.skillKey))
+          .limit(1);
+
+        if (!skill) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: `Skill with key ${input.skillKey} not found`,
+          });
+        }
+        skillId = skill.id;
+      }
+
+      if (!skillId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Could not resolve skill",
+        });
+      }
 
       // Validate evidence: ensure user owns all referenced turns and snapshots
       if (input.evidence) {

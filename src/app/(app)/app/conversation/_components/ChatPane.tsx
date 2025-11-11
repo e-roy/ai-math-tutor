@@ -12,6 +12,9 @@ import { HintsBadge } from "./HintsBadge";
 import { AnswerValidationBadge } from "./AnswerValidationBadge";
 import { extractExpectedAnswer } from "@/lib/grading/equivalence";
 import type { Turn } from "@/server/db/turns";
+import { Badge } from "@/components/ui/badge";
+import { trackProblemCompletion } from "@/lib/progress/track-completion";
+import { api } from "@/trpc/react";
 
 interface ChatPaneProps {
   conversationId: string;
@@ -26,11 +29,17 @@ export function ChatPane({
 }: ChatPaneProps) {
   const [input, setInput] = useState("");
   const { turns, setTurns, isStreaming } = useChatStore();
-  const { uploadedImages, isProblemSolved, answerAttempts, resetProblem } =
-    useConversationStore();
+  const {
+    uploadedImages,
+    isProblemSolved,
+    answerAttempts,
+    resetProblem,
+    consecutiveWrongAttempts,
+  } = useConversationStore();
 
   const { startStreaming } = useTutorStream(conversationId);
   const { validateAnswer } = useAnswerValidation();
+  const updateMasteryMutation = api.progress.updateMastery.useMutation();
 
   // Extract problem text from images or first user turn
   const extractProblemText = useMemo(() => {
@@ -50,6 +59,11 @@ export function ChatPane({
       return (turn.tool as { type?: string }).type === "hint";
     }).length;
   }, [turns]);
+
+  // Check if student is stuck
+  const isStuck = useMemo(() => {
+    return consecutiveWrongAttempts >= 2;
+  }, [consecutiveWrongAttempts]);
 
   // Check if asking for math answer
   const isAskingForMathAnswer = useMemo(() => {
@@ -116,7 +130,22 @@ export function ChatPane({
     if (problemText) {
       const expectedAnswer = extractExpectedAnswer(problemText);
       if (expectedAnswer) {
-        await validateAnswer(answer, expectedAnswer);
+        const isValid = await validateAnswer(answer, expectedAnswer);
+        
+        // Track completion if problem is solved correctly
+        if (isValid) {
+          await trackProblemCompletion(
+            {
+              problemText,
+              conversationId,
+              turns,
+              attempts: answerAttempts + 1,
+              hintsUsed: hintsCount,
+              isCorrect: true,
+            },
+            updateMasteryMutation,
+          );
+        }
       }
     }
 
@@ -139,6 +168,11 @@ export function ChatPane({
         <div className="flex gap-2">
           <HintsBadge count={hintsCount} />
           <AnswerValidationBadge />
+          {isStuck && (
+            <Badge variant="outline" className="bg-yellow-50">
+              Need help? Consider asking for a hint
+            </Badge>
+          )}
         </div>
 
         {isProblemSolved && (

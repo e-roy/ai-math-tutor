@@ -4,6 +4,17 @@
 export type TutorPath = "conversation" | "whiteboard";
 
 /**
+ * Socratic teaching phases
+ */
+export type SocraticPhase =
+  | "parse-problem" // Understanding what's given
+  | "inventory-knowns" // Identifying known information
+  | "identify-goal" // Determining what to find
+  | "select-method" // Choosing approach
+  | "step-through" // Working through solution
+  | "validate-answer"; // Checking the result
+
+/**
  * Extended conversation metadata structure
  * Includes path, topic, grade, and other optional fields
  */
@@ -11,7 +22,18 @@ export interface ConversationMeta {
   path?: TutorPath | null;
   topic?: string;
   grade?: string;
+  currentPhase?: SocraticPhase;
   [key: string]: unknown;
+}
+
+/**
+ * Conversation metadata with explicit phase tracking
+ */
+export interface ConversationMetadata {
+  path?: TutorPath;
+  topic?: string;
+  grade?: string;
+  currentPhase?: SocraticPhase;
 }
 
 /**

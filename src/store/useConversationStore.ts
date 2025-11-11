@@ -26,6 +26,13 @@ interface ConversationStore {
   incrementAnswerAttempts: () => void;
   resetAnswerAttempts: () => void;
 
+  // Stuck detection state
+  consecutiveWrongAttempts: number;
+  hintsUsedInProblem: number;
+  incrementConsecutiveWrong: () => void;
+  resetConsecutiveWrong: () => void;
+  incrementHintsUsed: () => void;
+
   // Reset functions
   resetProblem: () => void;
   resetConversation: () => void;
@@ -55,12 +62,26 @@ export const useConversationStore = create<ConversationStore>((set) => ({
     set((state) => ({ answerAttempts: state.answerAttempts + 1 })),
   resetAnswerAttempts: () => set({ answerAttempts: 0 }),
 
+  consecutiveWrongAttempts: 0,
+  hintsUsedInProblem: 0,
+  incrementConsecutiveWrong: () =>
+    set((state) => ({
+      consecutiveWrongAttempts: state.consecutiveWrongAttempts + 1,
+    })),
+  resetConsecutiveWrong: () => set({ consecutiveWrongAttempts: 0 }),
+  incrementHintsUsed: () =>
+    set((state) => ({
+      hintsUsedInProblem: state.hintsUsedInProblem + 1,
+    })),
+
   resetProblem: () =>
     set({
       uploadedImages: [],
       lastAnswerValidation: null,
       isProblemSolved: false,
       answerAttempts: 0,
+      consecutiveWrongAttempts: 0,
+      hintsUsedInProblem: 0,
     }),
 
   resetConversation: () =>
@@ -70,6 +91,8 @@ export const useConversationStore = create<ConversationStore>((set) => ({
       lastAnswerValidation: null,
       isProblemSolved: false,
       answerAttempts: 0,
+      consecutiveWrongAttempts: 0,
+      hintsUsedInProblem: 0,
     }),
 }));
 

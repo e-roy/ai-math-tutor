@@ -12,6 +12,12 @@ export function useAnswerValidation() {
   const setIsProblemSolved = useConversationStore(
     (state) => state.setIsProblemSolved,
   );
+  const incrementConsecutiveWrong = useConversationStore(
+    (state) => state.incrementConsecutiveWrong,
+  );
+  const resetConsecutiveWrong = useConversationStore(
+    (state) => state.resetConsecutiveWrong,
+  );
 
   const verifyEquivalence = api.ai.verifyEquivalence.useMutation();
 
@@ -37,7 +43,12 @@ export function useAnswerValidation() {
     }
 
     setLastAnswerValidation({ isValid, answer });
-    if (isValid) {
+    
+    // Track stuck state
+    if (!isValid) {
+      incrementConsecutiveWrong();
+    } else {
+      resetConsecutiveWrong();
       setIsProblemSolved(true);
     }
 

@@ -12,6 +12,11 @@ import {
   SOCRATIC_CONVERSATION_PROMPT,
 } from "@/lib/ai/prompts";
 import {
+  detectProblemType,
+  getProblemTypeGuidance,
+} from "@/lib/ai/problem-detector";
+import type { SocraticPhase } from "@/types/conversation";
+import {
   classifyTurnTool,
   boardAnnotationTool,
   checkAnswerTool,
@@ -62,6 +67,36 @@ function extractLatex(text: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Determine the current Socratic phase based on conversation history
+ */
+function determineCurrentPhase(
+  turns: Array<{ role: string; text: string | null }>,
+): SocraticPhase {
+  if (turns.length === 0) return "parse-problem";
+  if (turns.length <= 2) return "inventory-knowns";
+
+  const recentText = turns
+    .slice(-3)
+    .map((t) => t.text?.toLowerCase() || "")
+    .join(" ");
+
+  if (/what are we trying to find|what.*looking for|goal/.test(recentText)) {
+    return "identify-goal";
+  }
+  if (/method|strategy|approach|formula|operation/.test(recentText)) {
+    return "select-method";
+  }
+  if (/step|next|then|after/.test(recentText)) {
+    return "step-through";
+  }
+  if (/check|correct|verify|right/.test(recentText)) {
+    return "validate-answer";
+  }
+
+  return "step-through"; // Default to working through
 }
 
 export const aiRouter = createTRPCRouter({
@@ -595,13 +630,45 @@ For whiteboard submissions (after asking them to write on board): Use "Can you t
 
       // Build conversation history from turns
       let systemPrompt: string = SOCRATIC_CONVERSATION_PROMPT;
-      if (problemText && previousTurns.length === 0) {
-        // Add problem context for first message
-        systemPrompt = `${systemPrompt}\n\n[Internal context: The student is starting a new problem. The problem is: "${problemText}". Guide them through understanding and solving it using Socratic questioning.]`;
-      } else if (problemText) {
-        // Add problem context for ongoing conversation
-        systemPrompt = `${systemPrompt}\n\n[Internal context: The student is working on this problem: "${problemText}". Continue guiding them through Socratic questioning.]`;
+      
+      // Detect problem type and add guidance
+      if (problemText) {
+        const problemType = detectProblemType(problemText);
+        const typeGuidance = getProblemTypeGuidance(problemType);
+        
+        if (previousTurns.length === 0) {
+          // Add problem context for first message
+          systemPrompt = `${systemPrompt}\n\n[Internal context: The student is starting a new ${problemType} problem: "${problemText}". ${typeGuidance}]`;
+        } else {
+          // Add problem context for ongoing conversation
+          systemPrompt = `${systemPrompt}\n\n[Internal context: The student is working on this ${problemType} problem: "${problemText}". ${typeGuidance}]`;
+        }
       }
+
+      // Stuck detection: Check for recent incorrect attempts
+      const recentTurns = previousTurns.slice(-6); // Last 3 exchanges
+      const recentWrongAttempts = recentTurns.filter(
+        (turn) =>
+          turn.role === "assistant" &&
+          turn.text?.toLowerCase().includes("not correct"),
+      ).length;
+
+      if (recentWrongAttempts >= 2) {
+        systemPrompt = `${systemPrompt}\n\n[IMPORTANT: The student has struggled with ${recentWrongAttempts} incorrect attempts. Provide a concrete, helpful hint (NOT the answer) to guide them toward the solution. Be encouraging.]`;
+      }
+
+      // Phase tracking: Determine current phase and add guidance
+      const currentPhase = determineCurrentPhase(previousTurns);
+      const phaseGuidance = {
+        "parse-problem": "Help the student understand what the problem is asking.",
+        "inventory-knowns": "Guide them to list what information they have.",
+        "identify-goal": "Ask what they need to find or solve for.",
+        "select-method": "Help them choose an approach or formula.",
+        "step-through": "Guide them through the solution step by step.",
+        "validate-answer": "Help them verify their answer makes sense.",
+      };
+
+      systemPrompt = `${systemPrompt}\n\n[Current phase: ${currentPhase}. ${phaseGuidance[currentPhase]}]`;
 
       const messages: Array<{
         role: "user" | "assistant" | "system";
