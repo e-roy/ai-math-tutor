@@ -7,7 +7,10 @@ import { TRPCError } from "@trpc/server";
 import { createTRPCRouter, protectedProcedure } from "@/server/api/trpc";
 import { conversations, files, boards } from "@/server/db/schema";
 import { createTurn, getTurnsByConversation } from "@/server/db/turns";
-import { SOCRATIC_SYSTEM_PROMPT } from "@/lib/ai/prompts";
+import {
+  SOCRATIC_SYSTEM_PROMPT,
+  SOCRATIC_CONVERSATION_PROMPT,
+} from "@/lib/ai/prompts";
 import {
   classifyTurnTool,
   boardAnnotationTool,
@@ -490,6 +493,258 @@ For whiteboard submissions (after asking them to write on board): Use "Can you t
       yield {
         type: "done",
         turnId: turnId ?? null,
+        fullText: fullText,
+        latex: latex,
+        turnType: turnType,
+      };
+    }),
+
+  tutorTurnConversation: protectedProcedure
+    .input(
+      z.object({
+        conversationId: z.string().uuid(),
+        userText: z.string().min(1).optional(),
+        userLatex: z.string().optional(),
+        fileId: z.string().uuid().optional(),
+      }),
+    )
+    .subscription(async function* ({ input, ctx }) {
+      // Verify user owns the conversation
+      const [conversation] = await ctx.db
+        .select({ userId: conversations.userId, title: conversations.title })
+        .from(conversations)
+        .where(eq(conversations.id, input.conversationId))
+        .limit(1);
+
+      if (!conversation) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Conversation not found",
+        });
+      }
+
+      if (conversation.userId !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You do not have access to this conversation",
+        });
+      }
+
+      // Load previous turns from database
+      const previousTurns = await getTurnsByConversation(
+        ctx.db,
+        input.conversationId,
+      );
+
+      // Persist user turn if provided
+      if (input.userText || input.userLatex) {
+        await createTurn(ctx.db, {
+          conversationId: input.conversationId,
+          role: "user",
+          text: input.userText ?? null,
+          latex: input.userLatex ?? null,
+        });
+
+        // Auto-generate title from first user message if conversation doesn't have one
+        if (!conversation.title && previousTurns.length === 0) {
+          const titleText =
+            input.userText ??
+            (input.userLatex ? `Solve: ${input.userLatex}` : "");
+          if (titleText) {
+            const generatedTitle = generateTitleFromProblem(titleText);
+            try {
+              await ctx.db
+                .update(conversations)
+                .set({ title: generatedTitle })
+                .where(eq(conversations.id, input.conversationId));
+            } catch (error) {
+              // Non-fatal: title generation failed, but turn succeeded
+              console.error("Failed to update conversation title:", error);
+            }
+          }
+        }
+      }
+
+      // Extract problem text from files (OCR) or first user message
+      let problemText: string | null = null;
+
+      // First try: OCR text from file
+      if (input.fileId) {
+        const [file] = await ctx.db
+          .select({ ocrText: files.ocrText })
+          .from(files)
+          .where(eq(files.id, input.fileId))
+          .limit(1);
+
+        if (file?.ocrText && typeof file.ocrText === "string") {
+          problemText = file.ocrText;
+        }
+      }
+
+      // Second try: First user message in conversation
+      if (!problemText) {
+        const firstUserTurn = previousTurns.find(
+          (turn) => turn.role === "user",
+        );
+        if (firstUserTurn?.text) {
+          problemText = firstUserTurn.text;
+        } else if (firstUserTurn?.latex) {
+          problemText = firstUserTurn.latex;
+        }
+      }
+
+      // Build conversation history from turns
+      let systemPrompt: string = SOCRATIC_CONVERSATION_PROMPT;
+      if (problemText && previousTurns.length === 0) {
+        // Add problem context for first message
+        systemPrompt = `${systemPrompt}\n\n[Internal context: The student is starting a new problem. The problem is: "${problemText}". Guide them through understanding and solving it using Socratic questioning.]`;
+      } else if (problemText) {
+        // Add problem context for ongoing conversation
+        systemPrompt = `${systemPrompt}\n\n[Internal context: The student is working on this problem: "${problemText}". Continue guiding them through Socratic questioning.]`;
+      }
+
+      const messages: Array<{
+        role: "user" | "assistant" | "system";
+        content: string;
+      }> = [
+        {
+          role: "system",
+          content: systemPrompt,
+        },
+      ];
+
+      // Add previous turns from database
+      for (const turn of previousTurns) {
+        if (turn.text) {
+          messages.push({
+            role: turn.role,
+            content: turn.text,
+          });
+        } else if (turn.latex) {
+          messages.push({
+            role: turn.role,
+            content: `Solve: ${turn.latex}`,
+          });
+        }
+      }
+
+      // Add current user turn if provided
+      if (input.userText) {
+        messages.push({
+          role: "user",
+          content: input.userText,
+        });
+      } else if (input.userLatex) {
+        messages.push({
+          role: "user",
+          content: `Solve: ${input.userLatex}`,
+        });
+      }
+
+      // Add file context if fileId is provided and not already used for problem text
+      if (input.fileId && !problemText) {
+        const [file] = await ctx.db
+          .select({ ocrText: files.ocrText })
+          .from(files)
+          .where(eq(files.id, input.fileId))
+          .limit(1);
+
+        const ocrText = file?.ocrText;
+        if (ocrText && typeof ocrText === "string") {
+          // Add file context to the last user message or create a new one
+          const lastMessage = messages[messages.length - 1];
+          if (lastMessage?.role === "user") {
+            lastMessage.content = `Problem from image: ${ocrText}\n\n${lastMessage.content}`;
+          } else {
+            messages.push({
+              role: "user",
+              content: `Problem from image: ${ocrText}`,
+            });
+          }
+        }
+      }
+
+      // Stream the response using Vercel AI SDK
+      // Conversation path only uses classifyTurn tool (no checkAnswer, no boardAnnotation)
+      const result = streamText({
+        model: openai("gpt-4o-mini"),
+        messages: messages.map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        })),
+        tools: {
+          classifyTurn: classifyTurnTool,
+          evaluate: evaluateTool,
+          ...calculatorTools(),
+        },
+        stopWhen: stepCountIs(5),
+      });
+
+      // Process streaming response
+      let fullText = "";
+      let turnType: TurnClassifierResult["type"] | null = null;
+      let toolMetadata: unknown = null;
+
+      // Use fullStream to get both text and tool calls as they happen
+      try {
+        for await (const chunk of result.fullStream) {
+          if (chunk.type === "text-delta") {
+            fullText += chunk.text;
+            yield { type: "text", content: chunk.text };
+          } else if (chunk.type === "tool-call" && "input" in chunk) {
+            // Tool calls are handled automatically by the SDK
+            // We just track them for metadata
+            if (chunk.toolName === "classifyTurn") {
+              try {
+                const parsed = classifyTurnSchema.parse(chunk.input);
+                turnType = parsed.type;
+                toolMetadata = { type: parsed.type };
+              } catch {
+                // Ignore parse errors
+              }
+            }
+          } else if (chunk.type === "tool-result") {
+            // Tool execution completed - AI will continue generating text
+          } else if (chunk.type === "error") {
+            console.error("[AI Router] Stream error:", chunk);
+          } else if (chunk.type === "finish") {
+            // When finishReason is 'tool-calls', the SDK should continue automatically
+            // Don't break - let the stream continue if there are more chunks
+            // Only break if it's a final finish (stop, length, etc.)
+            if (
+              "finishReason" in chunk &&
+              chunk.finishReason !== "tool-calls" &&
+              chunk.finishReason !== "other"
+            ) {
+              break;
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[AI Router] Error processing stream:", error);
+        // If we have any text so far, still yield it
+        if (fullText.trim()) {
+          yield { type: "text", content: fullText };
+        }
+        throw error;
+      }
+
+      // Extract LaTeX from response if present
+      const latex = extractLatex(fullText);
+
+      // Persist assistant turn (conversation path always persists)
+      const assistantTurn = await createTurn(ctx.db, {
+        conversationId: input.conversationId,
+        role: "assistant",
+        text: fullText,
+        latex: latex,
+        tool: toolMetadata,
+      });
+
+      // Send final message with turn ID and metadata
+      yield {
+        type: "done",
+        turnId: assistantTurn.id,
         fullText: fullText,
         latex: latex,
         turnType: turnType,

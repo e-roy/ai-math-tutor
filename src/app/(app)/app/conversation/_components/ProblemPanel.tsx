@@ -111,6 +111,7 @@ export function ProblemPanel({
               conversationId={conversationId}
               tutorAvatarUrl={tutorAvatarUrl}
               tutorDisplayName={tutorDisplayName}
+              uploadedImages={uploadedImages}
             />
           </div>
         </div>

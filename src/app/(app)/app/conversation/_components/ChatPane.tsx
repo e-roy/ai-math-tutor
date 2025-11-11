@@ -11,17 +11,21 @@ import { useChatStore } from "@/store/useChatStore";
 import { api } from "@/trpc/react";
 import { Send } from "lucide-react";
 import { checkEquivalence } from "@/lib/math/equivalence";
+import { extractExpectedAnswer } from "@/lib/grading/equivalence";
+import type { UploadedImage } from "@/types/files";
 
 interface ChatPaneProps {
   conversationId: string;
   tutorAvatarUrl?: string;
   tutorDisplayName?: string;
+  uploadedImages?: UploadedImage[];
 }
 
 export function ChatPane({
   conversationId,
   tutorAvatarUrl,
   tutorDisplayName,
+  uploadedImages = [],
 }: ChatPaneProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -61,19 +65,17 @@ export function ChatPane({
     conversationId: string;
     userText?: string;
     userLatex?: string;
+    fileId?: string;
   } | null>(null);
 
   // Set up subscription at component level (hooks must be at top level)
-  api.ai.tutorTurn.useSubscription(
+  api.ai.tutorTurnConversation.useSubscription(
     subscriptionInput ?? { conversationId: "", userText: "" },
     {
       enabled: subscriptionEnabled && !!subscriptionInput && !!conversationId,
       onData: (data) => {
         if (data.type === "text" && data.content) {
           appendStreamingText(data.content);
-        } else if (data.type === "boardAnnotation") {
-          // Board annotations were added - refetch board to update Whiteboard
-          void utils.board.get.invalidate({ conversationId });
         } else if (data.type === "done") {
           // Create a turn object from the done message
           if (data.turnId && data.fullText !== undefined) {
@@ -89,8 +91,6 @@ export function ChatPane({
             finalizeStreaming(turn);
             // Invalidate turns query to refresh
             void utils.conversations.getTurns.invalidate({ conversationId });
-            // Also refetch board in case annotations were added
-            void utils.board.get.invalidate({ conversationId });
           }
           // Disable subscription after completion
           setSubscriptionEnabled(false);
@@ -105,6 +105,41 @@ export function ChatPane({
       },
     },
   );
+
+  // Count hints used during conversation
+  const hintsCount = useMemo(() => {
+    return turns.filter((turn) => {
+      if (turn.role !== "assistant" || !turn.tool) return false;
+      const toolType = (turn.tool as { type?: string }).type;
+      return toolType === "hint";
+    }).length;
+  }, [turns]);
+
+  // Helper function to extract problem text from various sources
+  const extractProblemText = useMemo(() => {
+    // First try: OCR text from uploaded images
+    if (uploadedImages.length > 0) {
+      const firstImageWithOcr = uploadedImages.find(
+        (img) => img.ocrText && !img.isProcessingOcr && !img.ocrError,
+      );
+      if (firstImageWithOcr?.ocrText) {
+        return firstImageWithOcr.ocrText;
+      }
+    }
+
+    // Second try: First user message in conversation
+    const firstUserTurn = turns.find((turn) => turn.role === "user");
+    if (firstUserTurn?.text) {
+      return firstUserTurn.text;
+    }
+
+    // Third try: First user turn with LaTeX
+    if (firstUserTurn?.latex) {
+      return firstUserTurn.latex;
+    }
+
+    return null;
+  }, [uploadedImages, turns]);
 
   // Detect if tutor is asking for a math answer
   const isAskingForMathAnswer = useMemo(() => {
@@ -153,12 +188,21 @@ export function ChatPane({
     };
     setTurns([...turns, userTurn]);
 
+    // Get fileId from first uploaded image if available
+    const firstImageWithFileId = uploadedImages.find(
+      (img) => img.fileId && !img.isProcessingOcr && !img.ocrError,
+    );
+
     // Start streaming
     setStreaming(true);
     setStreamingTurnType(null);
 
     // Trigger subscription
-    setSubscriptionInput({ conversationId, userText });
+    setSubscriptionInput({
+      conversationId,
+      userText,
+      fileId: firstImageWithFileId?.fileId,
+    });
     setSubscriptionEnabled(true);
   };
 
@@ -180,55 +224,38 @@ export function ChatPane({
     };
     setTurns([...turns, userTurn]);
 
-    // Try to validate answer client-side first
-    // TODO: Extract expected answer from conversation context or problem
-    // For now, we'll just validate that the answer is a valid expression
-    // and let the AI tutor verify correctness through conversation
+    // Extract problem text and validate answer if possible
+    const problemText = extractProblemText;
+    if (problemText) {
+      const expectedAnswer = extractExpectedAnswer(problemText);
+      if (expectedAnswer) {
+        // Validate using client-side equivalence check
+        const clientResult = checkEquivalence(answer, expectedAnswer);
+        let isValid = clientResult.isEquivalent;
 
-    // If we have an expected answer (from context), validate equivalence
-    // For MVP, we'll skip this and let the tutor handle validation
-    // const expectedAnswer = extractExpectedAnswer(turns);
-    // if (expectedAnswer) {
-    //   const clientResult = checkEquivalence(answer, expectedAnswer);
-    //   let isValid = clientResult.isEquivalent;
-    //
-    //   if (clientResult.confidence === "low") {
-    //     // Call server endpoint for LLM validation
-    //     try {
-    //       const serverResult = await verifyEquivalence.mutateAsync({
-    //         studentAnswer: answer,
-    //         expectedAnswer: expectedAnswer,
-    //       });
-    //       isValid = serverResult.isEquivalent;
-    //     } catch (error) {
-    //       console.error("Validation error:", error);
-    //     }
-    //   }
-    //
-    //   // Update mastery if answer is correct
-    //   // TODO: Extract skillId from conversation context or problem
-    //   if (isValid) {
-    //     try {
-    //       await updateMastery.mutateAsync({
-    //         skillId: "extracted-from-context", // TODO: Extract from context
-    //         level: calculateMasteryLevel(turns), // TODO: Implement level calculation
-    //         evidence: {
-    //           turnIds: [userTurn.id],
-    //           snapshotIds: [],
-    //           rubric: {
-    //             accuracy: 1.0,
-    //             method: "correct",
-    //             explanation: "Student provided correct answer",
-    //           },
-    //         },
-    //       });
-    //       // Invalidate progress query to refresh UI
-    //       void utils.progress.getOverview.invalidate();
-    //     } catch (error) {
-    //       console.error("Failed to update mastery:", error);
-    //     }
-    //   }
-    // }
+        // If confidence is low, use server-side LLM validation
+        if (clientResult.confidence === "low") {
+          try {
+            const serverResult = await verifyEquivalence.mutateAsync({
+              studentAnswer: answer,
+              expectedAnswer: expectedAnswer,
+            });
+            isValid = serverResult.isEquivalent;
+          } catch (error) {
+            console.error("Validation error:", error);
+            // Continue with client-side result if server validation fails
+          }
+        }
+
+        // Note: Mastery updates are still TODO - requires skill extraction
+        // which is more complex and not part of this implementation
+      }
+    }
+
+    // Get fileId from first uploaded image if available
+    const firstImageWithFileId = uploadedImages.find(
+      (img) => img.fileId && !img.isProcessingOcr && !img.ocrError,
+    );
 
     // Start streaming
     setStreaming(true);
@@ -239,6 +266,7 @@ export function ChatPane({
       conversationId,
       userText: answer,
       userLatex: latex,
+      fileId: firstImageWithFileId?.fileId,
     });
     setSubscriptionEnabled(true);
   };
@@ -249,6 +277,11 @@ export function ChatPane({
         {isLoading && (
           <div className="text-muted-foreground text-center">
             Loading conversation...
+          </div>
+        )}
+        {hintsCount > 0 && (
+          <div className="bg-muted/50 text-muted-foreground rounded-md border p-2 text-xs">
+            Hints used: {hintsCount}
           </div>
         )}
         {turns.map((turn) => (
