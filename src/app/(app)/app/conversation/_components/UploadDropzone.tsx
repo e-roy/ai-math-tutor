@@ -6,40 +6,43 @@ import { Upload } from "lucide-react";
 
 import { api } from "@/trpc/react";
 import { cn } from "@/lib/utils";
+import { useConversationStore } from "@/store/useConversationStore";
 
 interface UploadDropzoneProps {
   conversationId: string;
-  onUploadSuccess?: (fileId: string, blobUrl: string) => void;
-  onUploadError?: (error: Error) => void;
   className?: string;
 }
 
 export function UploadDropzone({
   conversationId,
-  onUploadSuccess,
-  onUploadError,
   className,
 }: UploadDropzoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
 
+  const addUploadedImage = useConversationStore(
+    (state) => state.addUploadedImage,
+  );
+  const updateUploadedImage = useConversationStore(
+    (state) => state.updateUploadedImage,
+  );
+
   const getUploadUrl = api.files.getUploadUrl.useMutation();
   const finalize = api.files.finalize.useMutation();
+  const parseImage = api.ocr.parseImage.useMutation();
 
   const handleFile = useCallback(
     async (file: File) => {
       // Validate file type
       const imageTypeRegex = /^image\/(png|jpeg)$/;
       if (!imageTypeRegex.exec(file.type)) {
-        const error = new Error("Only PNG and JPEG images are allowed");
-        onUploadError?.(error);
+        console.error("Only PNG and JPEG images are allowed");
         return;
       }
 
       // Validate file size (max 10MB)
       if (file.size > 10 * 1024 * 1024) {
-        const error = new Error("File size must be less than 10MB");
-        onUploadError?.(error);
+        console.error("File size must be less than 10MB");
         return;
       }
 
@@ -65,15 +68,52 @@ export function UploadDropzone({
           blobUrl: blob.url,
         });
 
-        onUploadSuccess?.(result.fileId, blob.url);
+        // Add image to store with processing flag
+        addUploadedImage({
+          fileId: result.fileId,
+          blobUrl: blob.url,
+          isProcessingOcr: true,
+        });
+
+        // Call OCR to extract text from image
+        try {
+          const ocrResult = await parseImage.mutateAsync({
+            fileId: result.fileId,
+          });
+          // Update image with OCR results
+          updateUploadedImage(result.fileId, {
+            ocrText: ocrResult.text,
+            ocrLatex: ocrResult.latex,
+            isProcessingOcr: false,
+          });
+        } catch (error) {
+          // Update image with error state
+          const errorMessage =
+            error instanceof Error
+              ? error.message
+              : "Failed to extract text from image. Please try again.";
+          updateUploadedImage(result.fileId, {
+            isProcessingOcr: false,
+            ocrError: errorMessage,
+          });
+        }
       } catch (error) {
-        const err = error instanceof Error ? error : new Error("Upload failed");
-        onUploadError?.(err);
+        console.error(
+          "Upload error:",
+          error instanceof Error ? error.message : "Upload failed",
+        );
       } finally {
         setIsUploading(false);
       }
     },
-    [conversationId, getUploadUrl, finalize, onUploadSuccess, onUploadError],
+    [
+      conversationId,
+      getUploadUrl,
+      finalize,
+      parseImage,
+      addUploadedImage,
+      updateUploadedImage,
+    ],
   );
 
   const handleDrop = useCallback(

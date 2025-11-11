@@ -51,6 +51,7 @@ export const conversationsRouter = createTRPCRouter({
           topic: z.string().optional(),
           grade: z.string().optional(),
           path: z.enum(["conversation", "whiteboard"]).optional(),
+          includeNullPath: z.boolean().optional(),
         })
         .optional(),
     )
@@ -73,7 +74,14 @@ export const conversationsRouter = createTRPCRouter({
 
       // Filter by path (stored in meta)
       if (input?.path) {
-        conditions.push(sql`${conversations.meta}->>'path' = ${input.path}`);
+        if (input?.includeNullPath) {
+          // Include specified path OR null/undefined paths (legacy conversations)
+          conditions.push(
+            sql`(${conversations.meta}->>'path' = ${input.path} OR ${conversations.meta}->>'path' IS NULL)`,
+          );
+        } else {
+          conditions.push(sql`${conversations.meta}->>'path' = ${input.path}`);
+        }
       }
 
       // Filter by topic (stored in meta)

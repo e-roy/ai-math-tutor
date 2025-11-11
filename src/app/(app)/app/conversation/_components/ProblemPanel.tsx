@@ -5,13 +5,10 @@ import Image from "next/image";
 import { UploadDropzone } from "./UploadDropzone";
 import { ChatPane } from "./ChatPane";
 import { MathRenderer } from "./MathRenderer";
-import type { UploadedImage } from "@/types/files";
+import { useConversationStore } from "@/store/useConversationStore";
 
 interface ProblemPanelProps {
   conversationId: string;
-  uploadedImages: UploadedImage[];
-  onUploadSuccess: (fileId: string, blobUrl: string) => void;
-  onUploadError: (error: Error) => void;
   tutorAvatarUrl?: string;
   tutorDisplayName?: string;
 }
@@ -22,12 +19,11 @@ interface ProblemPanelProps {
  */
 export function ProblemPanel({
   conversationId,
-  uploadedImages,
-  onUploadSuccess,
-  onUploadError,
   tutorAvatarUrl,
   tutorDisplayName,
 }: ProblemPanelProps) {
+  const uploadedImages = useConversationStore((state) => state.uploadedImages);
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -44,8 +40,6 @@ export function ProblemPanel({
         <div className="space-y-4">
           <UploadDropzone
             conversationId={conversationId}
-            onUploadSuccess={onUploadSuccess}
-            onUploadError={onUploadError}
             className="max-w-2xl"
           />
 
@@ -111,7 +105,6 @@ export function ProblemPanel({
               conversationId={conversationId}
               tutorAvatarUrl={tutorAvatarUrl}
               tutorDisplayName={tutorDisplayName}
-              uploadedImages={uploadedImages}
             />
           </div>
         </div>

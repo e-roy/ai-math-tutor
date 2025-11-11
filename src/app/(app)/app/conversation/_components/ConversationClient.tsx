@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { api } from "@/trpc/react";
@@ -11,9 +11,9 @@ import { NavBar } from "@/app/(app)/_components/NavBar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 import { useChatStore } from "@/store/useChatStore";
+import { useConversationStore } from "@/store/useConversationStore";
 import { useChildStore } from "@/store/useChildStore";
-import type { UploadedImage } from "@/types/files";
-import { getConversationPath, type TutorPath } from "@/types/conversation";
+import { getConversationPath } from "@/types/conversation";
 
 export function ConversationClient() {
   const router = useRouter();
@@ -21,34 +21,19 @@ export function ConversationClient() {
   const conversationIdFromUrl = searchParams.get("id");
 
   const currentChildId = useChildStore((state) => state.currentChildId);
-  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
-  const [selectedConversationId, setSelectedConversationId] = useState<
-    string | null
-  >(conversationIdFromUrl);
+  const selectedConversationId = useConversationStore(
+    (state) => state.selectedConversationId,
+  );
+  const setSelectedConversationId = useConversationStore(
+    (state) => state.setSelectedConversationId,
+  );
+  const resetConversation = useConversationStore(
+    (state) => state.resetConversation,
+  );
 
-  const parseImage = api.ocr.parseImage.useMutation();
-  const createConversation = api.conversations.create.useMutation({
-    onSuccess: (data) => {
-      setSelectedConversationId(data.conversationId);
-      router.push(`/app/conversation?id=${data.conversationId}`);
-    },
-  });
-
-  const setConversationId = useChatStore(
-    (state) => state.setConversationId,
-  ) as (id: string | null) => void;
-  const setTurns = useChatStore((state) => state.setTurns) as (
-    turns: ReturnType<typeof useChatStore.getState>["turns"],
-  ) => void;
-
-  const resetConversation = (): void => {
-    const state = useChatStore.getState();
-    (state.resetConversation as () => void)();
-  };
-  const clearTurns = (): void => {
-    const state = useChatStore.getState();
-    (state.clearTurns as () => void)();
-  };
+  const setConversationId = useChatStore((state) => state.setConversationId);
+  const setTurns = useChatStore((state) => state.setTurns);
+  const clearTurns = useChatStore((state) => state.clearTurns);
 
   // Fetch tutor persona when child is selected
   const { data: tutorPersona, isLoading: isTutorPersonaLoading } =
@@ -69,111 +54,59 @@ export function ConversationClient() {
     { enabled: !!selectedConversationId },
   );
 
-  // Update conversation ID in store when selected
-  useEffect(() => {
-    if (selectedConversationId) {
-      setConversationId(selectedConversationId);
-    }
-  }, [selectedConversationId, setConversationId]);
+  const createConversation = api.conversations.create.useMutation({
+    onSuccess: (data) => {
+      setSelectedConversationId(data.conversationId);
+      setConversationId(data.conversationId);
+      router.push(`/app/conversation?id=${data.conversationId}`);
+    },
+  });
 
-  // Update store when turns are loaded
-  useEffect(() => {
-    if (loadedTurns && selectedConversationId) {
-      setTurns(loadedTurns);
-    }
-  }, [loadedTurns, selectedConversationId, setTurns]);
-
-  // Sync URL with selected conversation
-  useEffect(() => {
-    if (
-      selectedConversationId &&
-      conversationIdFromUrl !== selectedConversationId
-    ) {
-      router.push(`/app/conversation?id=${selectedConversationId}`);
-    }
-  }, [selectedConversationId, conversationIdFromUrl, router]);
-
-  // Initialize from URL param
+  // Single effect: Sync URL -> Store -> Chat, and handle conversation creation
   useEffect(() => {
     if (
       conversationIdFromUrl &&
       conversationIdFromUrl !== selectedConversationId
     ) {
+      // URL changed, sync to store
       setSelectedConversationId(conversationIdFromUrl);
-    }
-  }, [conversationIdFromUrl, selectedConversationId]);
-
-  // Create conversation automatically if none selected
-  useEffect(() => {
-    if (
+      setConversationId(conversationIdFromUrl);
+      if (loadedTurns) {
+        setTurns(loadedTurns);
+      }
+    } else if (
+      !conversationIdFromUrl &&
       !selectedConversationId &&
-      !createConversation.isPending &&
-      !conversationIdFromUrl
+      !createConversation.isPending
     ) {
+      // No conversation selected, create new one
       createConversation.mutate({ path: "conversation" });
+    } else if (selectedConversationId && loadedTurns) {
+      // Update turns when loaded
+      setTurns(loadedTurns);
     }
-  }, [selectedConversationId, createConversation, conversationIdFromUrl]);
+  }, [
+    conversationIdFromUrl,
+    selectedConversationId,
+    loadedTurns,
+    setSelectedConversationId,
+    setConversationId,
+    setTurns,
+    createConversation,
+  ]);
 
   const handleSelectConversation = (conversationId: string) => {
     // Reset state when switching conversations
     resetConversation();
     clearTurns();
-    setUploadedImages([]);
     setSelectedConversationId(conversationId);
+    setConversationId(conversationId);
     router.push(`/app/conversation?id=${conversationId}`);
   };
 
   const handleNewConversation = () => {
     // Create new conversation with conversation path
     createConversation.mutate({ path: "conversation" });
-  };
-
-  const handleUploadSuccess = async (fileId: string, blobUrl: string) => {
-    // Add image to state with processing flag
-    setUploadedImages((prev) => [
-      ...prev,
-      { fileId, blobUrl, isProcessingOcr: true },
-    ]);
-
-    // Call OCR to extract text from image
-    try {
-      const result = await parseImage.mutateAsync({ fileId });
-      // Update image with OCR results
-      setUploadedImages((prev) =>
-        prev.map((img) =>
-          img.fileId === fileId
-            ? {
-                ...img,
-                ocrText: result.text,
-                ocrLatex: result.latex,
-                isProcessingOcr: false,
-              }
-            : img,
-        ),
-      );
-    } catch (error) {
-      // Update image with error state
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Failed to extract text from image. Please try again.";
-      setUploadedImages((prev) =>
-        prev.map((img) =>
-          img.fileId === fileId
-            ? {
-                ...img,
-                isProcessingOcr: false,
-                ocrError: errorMessage,
-              }
-            : img,
-        ),
-      );
-    }
-  };
-
-  const handleUploadError = (error: Error) => {
-    console.error("Upload error:", error);
-    // TODO: Show toast notification
   };
 
   // Show loading state while checking if child data is available
@@ -200,7 +133,7 @@ export function ConversationClient() {
     );
   }
 
-  const currentPath: TutorPath = conversationData
+  const currentPath = conversationData
     ? getConversationPath(conversationData.meta)
     : "conversation";
 
@@ -230,9 +163,6 @@ export function ConversationClient() {
               />
               <ProblemPanel
                 conversationId={selectedConversationId}
-                uploadedImages={uploadedImages}
-                onUploadSuccess={handleUploadSuccess}
-                onUploadError={handleUploadError}
                 tutorAvatarUrl={tutorPersona?.avatarUrl}
                 tutorDisplayName={tutorPersona?.displayName}
               />
