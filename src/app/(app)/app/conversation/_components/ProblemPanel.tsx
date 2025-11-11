@@ -5,7 +5,9 @@ import Image from "next/image";
 import { UploadDropzone } from "./UploadDropzone";
 import { ChatPane } from "./ChatPane";
 import { MathRenderer } from "./MathRenderer";
+import { DifficultySelector } from "./DifficultySelector";
 import { useConversationStore } from "@/store/useConversationStore";
+import { api } from "@/trpc/react";
 
 interface ProblemPanelProps {
   conversationId: string;
@@ -23,17 +25,34 @@ export function ProblemPanel({
   tutorDisplayName,
 }: ProblemPanelProps) {
   const uploadedImages = useConversationStore((state) => state.uploadedImages);
+  const difficulty = useConversationStore((state) => state.difficulty);
+
+  // Fetch conversation data to get current difficulty from meta
+  const { data: conversationData } = api.conversations.getById.useQuery(
+    { conversationId },
+    { enabled: !!conversationId }
+  );
+
+  const currentDifficulty = 
+    (conversationData?.meta as { difficulty?: "support" | "balanced" | "challenge" })?.difficulty ?? 
+    difficulty;
 
   return (
     <div className="space-y-6 p-6">
-      <div>
-        <h1 className="text-4xl font-bold">Tutor</h1>
-        <p className="text-muted-foreground mt-4">
-          Upload a screenshot or type your math problem to get started.
-        </p>
-        <p className="text-muted-foreground mt-2 text-sm">
-          Mode: Conversation help
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-4xl font-bold">Tutor</h1>
+          <p className="text-muted-foreground mt-4">
+            Upload a screenshot or type your math problem to get started.
+          </p>
+          <p className="text-muted-foreground mt-2 text-sm">
+            Mode: Conversation help
+          </p>
+        </div>
+        <DifficultySelector
+          conversationId={conversationId}
+          currentDifficulty={currentDifficulty}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -100,7 +119,7 @@ export function ProblemPanel({
           )}
         </div>
         <div className="space-y-4">
-          <div className="h-[600px] rounded-lg border">
+          <div className="h-[600px] rounded-lg border overflow-hidden">
             <ChatPane
               conversationId={conversationId}
               tutorAvatarUrl={tutorAvatarUrl}

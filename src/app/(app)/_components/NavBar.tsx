@@ -18,7 +18,7 @@ export function NavBar() {
   ];
 
   return (
-    <nav className="bg-background border-b">
+    <nav className="bg-background relative z-50 border-b">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
         <div className="flex items-center gap-6">
           <Link href="/app" className="text-lg font-semibold">

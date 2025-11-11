@@ -4,6 +4,11 @@
 export type TutorPath = "conversation" | "whiteboard";
 
 /**
+ * Difficulty level for tutoring scaffolding
+ */
+export type DifficultyLevel = "support" | "balanced" | "challenge";
+
+/**
  * Socratic teaching phases
  */
 export type SocraticPhase =
@@ -16,12 +21,13 @@ export type SocraticPhase =
 
 /**
  * Extended conversation metadata structure
- * Includes path, topic, grade, and other optional fields
+ * Includes path, topic, grade, difficulty, and other optional fields
  */
 export interface ConversationMeta {
   path?: TutorPath | null;
   topic?: string;
   grade?: string;
+  difficulty?: DifficultyLevel;
   currentPhase?: SocraticPhase;
   [key: string]: unknown;
 }
@@ -33,6 +39,7 @@ export interface ConversationMetadata {
   path?: TutorPath;
   topic?: string;
   grade?: string;
+  difficulty?: DifficultyLevel;
   currentPhase?: SocraticPhase;
 }
 

@@ -25,7 +25,7 @@ export function ChatMessages({
   }, [turns, isStreaming, streamingText]);
 
   return (
-    <div className="flex-1 space-y-4 overflow-y-auto p-4">
+    <div className="flex-1 min-h-0 space-y-4 overflow-y-auto p-4">
       {turns.map((turn) => (
         <MessageBubble
           key={turn.id}

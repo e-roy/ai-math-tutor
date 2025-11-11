@@ -68,7 +68,9 @@ export function ConversationClient() {
       conversationIdFromUrl &&
       conversationIdFromUrl !== selectedConversationId
     ) {
-      // URL changed, sync to store
+      // URL changed, sync to store and reset previous conversation state
+      resetConversation();
+      clearTurns();
       setSelectedConversationId(conversationIdFromUrl);
       setConversationId(conversationIdFromUrl);
       if (loadedTurns) {
@@ -92,6 +94,8 @@ export function ConversationClient() {
     setSelectedConversationId,
     setConversationId,
     setTurns,
+    resetConversation,
+    clearTurns,
     createConversation,
   ]);
 
@@ -105,6 +109,9 @@ export function ConversationClient() {
   };
 
   const handleNewConversation = () => {
+    // Reset state before creating new conversation
+    resetConversation();
+    clearTurns();
     // Create new conversation with conversation path
     createConversation.mutate({ path: "conversation" });
   };
@@ -155,8 +162,8 @@ export function ConversationClient() {
       <SidebarInset>
         <div className="flex flex-1 flex-col">
           <NavBar />
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+          <div className="@container/main flex flex-1 flex-col gap-2 overflow-y-auto">
+            <div className="flex flex-col gap-4 px-4 py-4 md:gap-6 md:py-6">
               <TutorHeader
                 currentPath={currentPath}
                 tutorPersona={tutorPersona}

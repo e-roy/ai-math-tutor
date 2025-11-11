@@ -10,6 +10,7 @@ import { createTurn, getTurnsByConversation } from "@/server/db/turns";
 import {
   SOCRATIC_SYSTEM_PROMPT,
   SOCRATIC_CONVERSATION_PROMPT,
+  getAdaptedSocraticPrompt,
 } from "@/lib/ai/prompts";
 import {
   detectProblemType,
@@ -125,7 +126,11 @@ export const aiRouter = createTRPCRouter({
     .subscription(async function* ({ input, ctx }) {
       // Verify user owns the conversation and check title
       const [conversation] = await ctx.db
-        .select({ userId: conversations.userId, title: conversations.title })
+        .select({
+          userId: conversations.userId,
+          title: conversations.title,
+          meta: conversations.meta,
+        })
         .from(conversations)
         .where(eq(conversations.id, input.conversationId))
         .limit(1);
@@ -239,9 +244,15 @@ export const aiRouter = createTRPCRouter({
       // problemText is provided directly as a parameter
       const problemText: string | null = input.problemText ?? null;
 
+      // Get conversation meta for difficulty and grade
+      const conversationMeta = (conversation.meta as Record<string, unknown>) ?? {};
+      const difficulty = (conversationMeta.difficulty as "support" | "balanced" | "challenge") ?? "balanced";
+      const grade = (conversationMeta.grade as string) ?? "default";
+
       // Build conversation history from turns
       // Detect problem type and get specific guidance
-      let systemPrompt = SOCRATIC_CONVERSATION_PROMPT; // Use conversation path prompt
+      // Use adapted prompt based on child's grade and difficulty preference
+      let systemPrompt = getAdaptedSocraticPrompt(grade, difficulty);
       
       // Handle hint request
       if (input.isHintRequest) {

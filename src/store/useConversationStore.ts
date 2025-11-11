@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { UploadedImage } from "@/types/files";
+import type { DifficultyLevel } from "@/types/conversation";
 
 export interface CompletionData {
   problemText: string;
@@ -15,6 +16,10 @@ interface ConversationStore {
   // Conversation selection
   selectedConversationId: string | null;
   setSelectedConversationId: (id: string | null) => void;
+
+  // Difficulty level
+  difficulty: DifficultyLevel;
+  setDifficulty: (difficulty: DifficultyLevel) => void;
 
   // Image uploads
   uploadedImages: UploadedImage[];
@@ -61,6 +66,9 @@ interface ConversationStore {
 export const useConversationStore = create<ConversationStore>((set) => ({
   selectedConversationId: null,
   setSelectedConversationId: (id) => set({ selectedConversationId: id }),
+
+  difficulty: "balanced",
+  setDifficulty: (difficulty) => set({ difficulty }),
 
   uploadedImages: [],
   addUploadedImage: (image) =>

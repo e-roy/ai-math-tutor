@@ -220,14 +220,14 @@ export function ChatPane({
 
   return (
     <>
-      <div className="flex h-full flex-col">
+      <div className="flex h-full flex-col overflow-hidden">
         <ChatMessages
           conversationId={conversationId}
           tutorAvatarUrl={tutorAvatarUrl}
           tutorDisplayName={tutorDisplayName}
         />
 
-        <div className="space-y-2 p-4">
+        <div className="flex-shrink-0 space-y-2 border-t p-4">
           <div className="flex gap-2">
             <HintsBadge count={hintsCount} />
             <AnswerValidationBadge />

@@ -26,6 +26,8 @@ export const conversationsRouter = createTRPCRouter({
       if (input?.path) {
         meta.path = input.path;
       }
+      // Set default difficulty to "balanced" for new conversations
+      meta.difficulty = "balanced";
 
       const [conversation] = await ctx.db
         .insert(conversations)
@@ -251,6 +253,62 @@ export const conversationsRouter = createTRPCRouter({
       }
 
       return { id: updated.id, meta: updated.meta };
+    }),
+
+  updateDifficulty: protectedProcedure
+    .input(
+      z.object({
+        conversationId: z.string().uuid(),
+        difficulty: z.enum(["support", "balanced", "challenge"]),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      if (!ctx.session?.user) {
+        throw new TRPCError({
+          code: "UNAUTHORIZED",
+          message: "Unauthorized",
+        });
+      }
+
+      // Verify user owns the conversation
+      const [conversation] = await ctx.db
+        .select({ userId: conversations.userId, meta: conversations.meta })
+        .from(conversations)
+        .where(eq(conversations.id, input.conversationId))
+        .limit(1);
+
+      if (!conversation) {
+        throw new TRPCError({
+          code: "NOT_FOUND",
+          message: "Conversation not found",
+        });
+      }
+
+      if (conversation.userId !== ctx.session.user.id) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "You do not have access to this conversation",
+        });
+      }
+
+      // Update meta with new difficulty
+      const meta = (conversation.meta as Record<string, unknown>) ?? {};
+      meta.difficulty = input.difficulty;
+
+      const [updated] = await ctx.db
+        .update(conversations)
+        .set({ meta })
+        .where(eq(conversations.id, input.conversationId))
+        .returning({ id: conversations.id, meta: conversations.meta });
+
+      if (!updated) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Failed to update conversation difficulty",
+        });
+      }
+
+      return { success: true, difficulty: input.difficulty };
     }),
 
   archive: protectedProcedure
