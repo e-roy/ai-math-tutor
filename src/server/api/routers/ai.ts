@@ -28,6 +28,7 @@ import {
 import { calculatorTools } from "@/lib/ai/math-tools";
 import type { TurnClassifierResult } from "@/types/ai";
 import { generateTitleFromProblem } from "@/lib/conversations/title-generator";
+import { detectTopic, inferGrade } from "@/lib/conversations/topic-detector";
 import {
   drawBox,
   drawArrow,
@@ -109,6 +110,7 @@ export const aiRouter = createTRPCRouter({
         fileId: z.string().uuid().optional(),
         ephemeral: z.boolean().optional(),
         problemText: z.string().optional(),
+        isHintRequest: z.boolean().optional(),
         conversationHistory: z
           .array(
             z.object({
@@ -206,13 +208,53 @@ export const aiRouter = createTRPCRouter({
         }
       }
 
+      // Auto-tag conversation with topic and grade if not already set
+      if (input.problemText && previousTurns.length === 0) {
+        const currentMeta = conversation.meta as Record<string, unknown> | null;
+        if (!currentMeta?.topic || !currentMeta?.grade) {
+          try {
+            const problemType = detectProblemType(input.problemText);
+            const topic = detectTopic(input.problemText, problemType);
+            const grade = inferGrade(input.problemText);
+
+            const updatedMeta = {
+              ...(currentMeta || {}),
+              topic: currentMeta?.topic || topic,
+              grade: currentMeta?.grade || grade,
+              path: currentMeta?.path || "conversation",
+            };
+
+            await ctx.db
+              .update(conversations)
+              .set({ meta: updatedMeta })
+              .where(eq(conversations.id, input.conversationId));
+          } catch (error) {
+            // Non-fatal: tagging failed
+            console.error("Failed to auto-tag conversation:", error);
+          }
+        }
+      }
+
       // Extract problem text from conversation
       // problemText is provided directly as a parameter
       const problemText: string | null = input.problemText ?? null;
 
       // Build conversation history from turns
-      let systemPrompt = SOCRATIC_SYSTEM_PROMPT;
+      // Detect problem type and get specific guidance
+      let systemPrompt = SOCRATIC_CONVERSATION_PROMPT; // Use conversation path prompt
+      
+      // Handle hint request
+      if (input.isHintRequest) {
+        systemPrompt += `\n\n## Hint Request\nThe student has explicitly requested a hint. Provide a concrete, helpful hint that guides them toward the solution WITHOUT giving the answer directly. Use encouraging language and focus on the next step they should take or concept they should consider.`;
+      }
+
       if (problemText) {
+        const problemType = detectProblemType(problemText);
+        const typeGuidance = getProblemTypeGuidance(problemType);
+
+        // Add problem type context to system prompt
+        systemPrompt += `\n\n## Current Problem Context\nProblem Type: ${problemType}\nGuidance: ${typeGuidance}\nProblem Text: ${problemText}\n\nAdapt your questions to this specific problem type.`;
+
         // Add problem text context to system prompt
         // The AI should ask "What is {equation}?" as the first question
         // and use checkAnswer tool to verify student answers

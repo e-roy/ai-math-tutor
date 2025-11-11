@@ -119,7 +119,7 @@ export const progressRouter = createTRPCRouter({
       // Upsert mastery
       await upsertMastery(ctx.db, {
         userId,
-        skillId: input.skillId,
+        skillId,
         level: input.level,
         evidence: input.evidence as Record<string, unknown> | undefined,
       });
@@ -190,5 +190,56 @@ export const progressRouter = createTRPCRouter({
     }));
 
     return { domains };
+  }),
+
+  getMiniSummary: protectedProcedure.query(async ({ ctx }) => {
+    const userId = ctx.session.user.id;
+
+    // Get all mastery records for the user
+    const userMastery = await getMasteryByUser(ctx.db, userId);
+
+    // Filter recent updates (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    
+    const recentMastery = userMastery.filter(
+      (m) => m.updatedAt >= sevenDaysAgo,
+    );
+
+    // Get all skills to join with mastery data
+    const skillsByDomain = await getSkillsByDomain(ctx.db);
+    const allSkills = skillsByDomain.flatMap((d) => d.skills);
+
+    // Get top 3 skills by mastery level (recent updates preferred)
+    const skillsWithMastery = userMastery
+      .map((mastery) => {
+        const skill = allSkills.find((s) => s.id === mastery.skillId);
+        if (!skill) return null;
+        return {
+          id: skill.id,
+          topic: skill.topic,
+          subtopic: skill.subtopic,
+          key: skill.key,
+          masteryLevel: mastery.level as 0 | 1 | 2 | 3 | 4,
+          updatedAt: mastery.updatedAt,
+        };
+      })
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+      .slice(0, 3);
+
+    // Calculate overall progress
+    const totalPracticed = userMastery.length;
+    const averageMastery =
+      totalPracticed > 0
+        ? userMastery.reduce((sum, m) => sum + m.level, 0) / totalPracticed / 4
+        : 0;
+    const overallProgress = Math.round(averageMastery * 100);
+
+    return {
+      recentSkills: skillsWithMastery,
+      overallProgress,
+      totalSkillsPracticed: totalPracticed,
+    };
   }),
 });

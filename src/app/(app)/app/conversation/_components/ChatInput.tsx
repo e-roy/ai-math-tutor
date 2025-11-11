@@ -3,6 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MathAnswerBox } from "@/components/MathAnswerBox";
+import { HintButton } from "./HintButton";
 import { Send } from "lucide-react";
 
 interface ChatInputProps {
@@ -10,8 +11,10 @@ interface ChatInputProps {
   onChange: (value: string) => void;
   onSubmit: (text: string) => void;
   onMathAnswerSubmit: (answer: string, latex?: string) => void;
+  onHintRequest: () => void;
   disabled: boolean;
   showMathInput: boolean;
+  hintCount?: number;
 }
 
 export function ChatInput({
@@ -19,8 +22,10 @@ export function ChatInput({
   onChange,
   onSubmit,
   onMathAnswerSubmit,
+  onHintRequest,
   disabled,
   showMathInput,
+  hintCount = 0,
 }: ChatInputProps) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,9 +58,16 @@ export function ChatInput({
               }
             }}
           />
-          <Button type="submit" disabled={!value.trim() || disabled}>
-            <Send className="h-4 w-4" />
-          </Button>
+          <div className="flex flex-col gap-2">
+            <HintButton
+              onRequestHint={onHintRequest}
+              disabled={disabled}
+              hintCount={hintCount}
+            />
+            <Button type="submit" disabled={!value.trim() || disabled}>
+              <Send className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </form>
     </div>

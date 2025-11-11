@@ -10,6 +10,7 @@ import { ChatInput } from "./ChatInput";
 import { ProblemSolvedAlert } from "./ProblemSolvedAlert";
 import { HintsBadge } from "./HintsBadge";
 import { AnswerValidationBadge } from "./AnswerValidationBadge";
+import { CompletionModal } from "./CompletionModal";
 import { extractExpectedAnswer } from "@/lib/grading/equivalence";
 import type { Turn } from "@/server/db/turns";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +36,12 @@ export function ChatPane({
     answerAttempts,
     resetProblem,
     consecutiveWrongAttempts,
+    isCompletionModalOpen,
+    completionData,
+    openCompletionModal,
+    closeCompletionModal,
+    hintRequests,
+    incrementHintRequests,
   } = useConversationStore();
 
   const { startStreaming } = useTutorStream(conversationId);
@@ -88,6 +95,33 @@ export function ChatPane({
     );
   }, [turns, isStreaming]);
 
+  const handleHintRequest = () => {
+    if (isStreaming) return;
+
+    // Increment hint counter
+    incrementHintRequests();
+
+    // Send hint request message to AI
+    const hintRequestText = "I would like a hint, please.";
+    const userTurn: Turn = {
+      id: crypto.randomUUID(),
+      conversationId,
+      role: "user",
+      text: hintRequestText,
+      latex: null,
+      tool: null,
+      createdAt: new Date(),
+    };
+    setTurns([...turns, userTurn]);
+
+    const fileId = uploadedImages.find(
+      (img) => img.fileId && !img.isProcessingOcr && !img.ocrError,
+    )?.fileId;
+
+    // Pass isHintRequest flag to AI
+    startStreaming({ userText: hintRequestText, fileId, isHintRequest: true });
+  };
+
   const handleSubmit = async (userText: string) => {
     if (!userText.trim() || isStreaming) return;
 
@@ -132,19 +166,42 @@ export function ChatPane({
       if (expectedAnswer) {
         const isValid = await validateAnswer(answer, expectedAnswer);
         
-        // Track completion if problem is solved correctly
+        // Track completion and show modal if problem is solved correctly
         if (isValid) {
+          const currentAttempts = answerAttempts + 1;
+          
           await trackProblemCompletion(
             {
               problemText,
               conversationId,
               turns,
-              attempts: answerAttempts + 1,
+              attempts: currentAttempts,
               hintsUsed: hintsCount,
               isCorrect: true,
             },
             updateMasteryMutation,
           );
+
+          // Determine mastery level based on performance
+          let masteryLevel: "low" | "medium" | "high" = "low";
+          if (currentAttempts === 1 && hintsCount === 0) {
+            masteryLevel = "high";
+          } else if (currentAttempts <= 2 && hintsCount <= 1) {
+            masteryLevel = "high";
+          } else if (currentAttempts <= 3) {
+            masteryLevel = "medium";
+          } else {
+            masteryLevel = "low";
+          }
+
+          // Open completion modal with data
+          openCompletionModal({
+            problemText,
+            finalAnswer: answer,
+            attempts: currentAttempts,
+            hintsUsed: hintsCount,
+            masteryLevel,
+          });
         }
       }
     }
@@ -156,41 +213,57 @@ export function ChatPane({
     startStreaming({ userText: answer, userLatex: latex, fileId });
   };
 
+  const handleNextProblem = () => {
+    closeCompletionModal();
+    resetProblem();
+  };
+
   return (
-    <div className="flex h-full flex-col">
-      <ChatMessages
-        conversationId={conversationId}
-        tutorAvatarUrl={tutorAvatarUrl}
-        tutorDisplayName={tutorDisplayName}
-      />
-
-      <div className="space-y-2 p-4">
-        <div className="flex gap-2">
-          <HintsBadge count={hintsCount} />
-          <AnswerValidationBadge />
-          {isStuck && (
-            <Badge variant="outline" className="bg-yellow-50">
-              Need help? Consider asking for a hint
-            </Badge>
-          )}
-        </div>
-
-        {isProblemSolved && (
-          <ProblemSolvedAlert
-            attempts={answerAttempts}
-            onStartNew={resetProblem}
-          />
-        )}
-
-        <ChatInput
-          value={input}
-          onChange={setInput}
-          onSubmit={handleSubmit}
-          onMathAnswerSubmit={handleMathAnswerSubmit}
-          disabled={isStreaming}
-          showMathInput={isAskingForMathAnswer}
+    <>
+      <div className="flex h-full flex-col">
+        <ChatMessages
+          conversationId={conversationId}
+          tutorAvatarUrl={tutorAvatarUrl}
+          tutorDisplayName={tutorDisplayName}
         />
+
+        <div className="space-y-2 p-4">
+          <div className="flex gap-2">
+            <HintsBadge count={hintsCount} />
+            <AnswerValidationBadge />
+            {isStuck && (
+              <Badge variant="outline" className="bg-yellow-50">
+                Need help? Consider asking for a hint
+              </Badge>
+            )}
+          </div>
+
+          {isProblemSolved && (
+            <ProblemSolvedAlert
+              attempts={answerAttempts}
+              onStartNew={resetProblem}
+            />
+          )}
+
+          <ChatInput
+            value={input}
+            onChange={setInput}
+            onSubmit={handleSubmit}
+            onMathAnswerSubmit={handleMathAnswerSubmit}
+            onHintRequest={handleHintRequest}
+            disabled={isStreaming}
+            showMathInput={isAskingForMathAnswer}
+            hintCount={hintRequests}
+          />
+        </div>
       </div>
-    </div>
+
+      <CompletionModal
+        open={isCompletionModalOpen}
+        onOpenChange={closeCompletionModal}
+        data={completionData}
+        onNextProblem={handleNextProblem}
+      />
+    </>
   );
 }

@@ -10,6 +10,7 @@ export function useTutorStream(conversationId: string) {
     userText?: string;
     userLatex?: string;
     fileId?: string;
+    isHintRequest?: boolean;
   } | null>(null);
 
   const {
@@ -60,6 +61,7 @@ export function useTutorStream(conversationId: string) {
     userText?: string;
     userLatex?: string;
     fileId?: string;
+    isHintRequest?: boolean;
   }) => {
     setStreaming(true);
     setStreamingTurnType(null);

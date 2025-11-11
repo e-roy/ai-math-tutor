@@ -1,6 +1,16 @@
 import { create } from "zustand";
 import type { UploadedImage } from "@/types/files";
 
+export interface CompletionData {
+  problemText: string;
+  finalAnswer: string;
+  score?: number;
+  masteryLevel?: "low" | "medium" | "high";
+  attempts: number;
+  hintsUsed: number;
+  timeElapsed?: number;
+}
+
 interface ConversationStore {
   // Conversation selection
   selectedConversationId: string | null;
@@ -32,6 +42,16 @@ interface ConversationStore {
   incrementConsecutiveWrong: () => void;
   resetConsecutiveWrong: () => void;
   incrementHintsUsed: () => void;
+
+  // Completion modal state
+  isCompletionModalOpen: boolean;
+  completionData: CompletionData | null;
+  openCompletionModal: (data: CompletionData) => void;
+  closeCompletionModal: () => void;
+
+  // Hint requests
+  hintRequests: number;
+  incrementHintRequests: () => void;
 
   // Reset functions
   resetProblem: () => void;
@@ -74,6 +94,17 @@ export const useConversationStore = create<ConversationStore>((set) => ({
       hintsUsedInProblem: state.hintsUsedInProblem + 1,
     })),
 
+  isCompletionModalOpen: false,
+  completionData: null,
+  openCompletionModal: (data) =>
+    set({ isCompletionModalOpen: true, completionData: data }),
+  closeCompletionModal: () =>
+    set({ isCompletionModalOpen: false, completionData: null }),
+
+  hintRequests: 0,
+  incrementHintRequests: () =>
+    set((state) => ({ hintRequests: state.hintRequests + 1 })),
+
   resetProblem: () =>
     set({
       uploadedImages: [],
@@ -82,6 +113,9 @@ export const useConversationStore = create<ConversationStore>((set) => ({
       answerAttempts: 0,
       consecutiveWrongAttempts: 0,
       hintsUsedInProblem: 0,
+      hintRequests: 0,
+      isCompletionModalOpen: false,
+      completionData: null,
     }),
 
   resetConversation: () =>
@@ -93,6 +127,9 @@ export const useConversationStore = create<ConversationStore>((set) => ({
       answerAttempts: 0,
       consecutiveWrongAttempts: 0,
       hintsUsedInProblem: 0,
+      hintRequests: 0,
+      isCompletionModalOpen: false,
+      completionData: null,
     }),
 }));
 

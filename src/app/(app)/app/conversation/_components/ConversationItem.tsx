@@ -2,6 +2,7 @@
 
 import { Archive, ArchiveRestore, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 interface ConversationItemProps {
@@ -70,20 +71,20 @@ export function ConversationItem({
             )}
           </Button>
         </div>
-        <div className="text-muted-foreground flex items-center gap-2 text-xs">
-          <Calendar className="h-3 w-3" />
-          <span>{formatDate(conversation.createdAt)}</span>
+        <div className="flex items-center gap-2">
+          <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            <Calendar className="h-3 w-3" />
+            <span>{formatDate(conversation.createdAt)}</span>
+          </div>
           {(conversation.meta as { topic?: string })?.topic && (
-            <>
-              <span>•</span>
-              <span>{(conversation.meta as { topic?: string }).topic}</span>
-            </>
+            <Badge variant="secondary" className="h-5 text-xs">
+              {(conversation.meta as { topic?: string }).topic}
+            </Badge>
           )}
           {(conversation.meta as { grade?: string })?.grade && (
-            <>
-              <span>•</span>
-              <span>{(conversation.meta as { grade?: string }).grade}</span>
-            </>
+            <Badge variant="outline" className="h-5 text-xs">
+              {(conversation.meta as { grade?: string }).grade}
+            </Badge>
           )}
         </div>
       </div>
