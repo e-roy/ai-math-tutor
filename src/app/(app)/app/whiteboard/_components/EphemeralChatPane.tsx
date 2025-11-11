@@ -1,264 +1,186 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import type { Turn } from "@/server/db/turns";
+import {
+  useState,
+  useRef,
+  useEffect,
+  forwardRef,
+  useImperativeHandle,
+  useCallback,
+} from "react";
 import type { TurnType } from "@/types/ai";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageBubble } from "@/components/MessageBubble";
-import { api } from "@/trpc/react";
-import { Send } from "lucide-react";
+import { Send, CheckCircle } from "lucide-react";
 import { usePracticeStore } from "@/store/usePracticeStore";
+import { useChatSubscription } from "@/hooks/useChatSubscription";
+import { usePracticeSession } from "@/hooks/usePracticeSession";
+import { api } from "@/trpc/react";
 
 interface EphemeralChatPaneProps {
   conversationId: string;
+}
+
+export interface EphemeralChatPaneRef {
+  sendMessage: (text: string) => void;
 }
 
 /**
  * EphemeralChatPane component for whiteboard practice mode
  * Chat turns are stored in the practice store
  */
-export function EphemeralChatPane({ conversationId }: EphemeralChatPaneProps) {
+export const EphemeralChatPane = forwardRef<
+  EphemeralChatPaneRef,
+  EphemeralChatPaneProps
+>(function EphemeralChatPane({ conversationId }, ref) {
   const problemText = usePracticeStore((state) => state.problemText);
-  const isPracticeActive = usePracticeStore((state) => state.isTimerRunning);
-  const triggerMessage = usePracticeStore((state) => state.triggerMessage);
   const chatTurns = usePracticeStore((state) => state.chatTurns);
-  
-  const setChatTurns = usePracticeStore((state) => state.setChatTurns);
-  const incrementChatAttempts = usePracticeStore((state) => state.incrementChatAttempts);
+  const incrementChatAttempts = usePracticeStore(
+    (state) => state.incrementChatAttempts,
+  );
   const incrementHints = usePracticeStore((state) => state.incrementHints);
 
   const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingText, setStreamingText] = useState("");
-  const [streamingTurnType, setStreamingTurnType] = useState<TurnType | null>(
-    null,
-  );
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [hasChatAnswerCorrect, setHasChatAnswerCorrect] = useState(false);
+  const [hasWhiteboardAnswerCorrect, setHasWhiteboardAnswerCorrect] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const lastTriggerMessageRef = useRef<string | null>(null);
+  const sendChatMessageRef = useRef<((message: { text: string; ephemeral: boolean }) => void) | null>(null);
 
-  // Clear turns when conversationId changes or component unmounts
+  const utils = api.useUtils();
+  const generateProblemMutation = api.practice.generateProblem.useMutation();
+
+  // Use custom practice session hook
+  const { handleSubmit, isSubmitting } = usePracticeSession(conversationId);
+
+  // Define submit function before useChatSubscription so it's available in callback
+  const onSubmitPractice = useCallback(async () => {
+    await handleSubmit({
+      problemText,
+      chatTurns,
+      onAnswerChecked: (answer: string) => {
+        // Send the answer check result to chat if sendChatMessage is available
+        if (sendChatMessageRef.current) {
+          sendChatMessageRef.current({ text: answer, ephemeral: true });
+        }
+      },
+    });
+  }, [handleSubmit, problemText, chatTurns]);
+
+  // Use custom chat subscription hook
+  const {
+    sendMessage: sendChatMessage,
+    isStreaming,
+    streamingText,
+    streamingTurnType,
+  } = useChatSubscription({
+    conversationId,
+    onHintUsed: () => incrementHints(),
+    onBoardAnnotation: () => {
+      void utils.board.get.invalidate({ conversationId });
+    },
+    onStreamComplete: (turn) => {
+      // Check if AI confirmed chat answer is correct (first part of challenge)
+      // AI says "Correct!" when chat answer is right
+      if (!hasChatAnswerCorrect && turn.text.includes("Correct!")) {
+        setHasChatAnswerCorrect(true);
+      }
+      
+      // Check if AI confirmed whiteboard answer is correct (second part of challenge)
+      // AI says "Very good!" when whiteboard answer is correct
+      if (!hasWhiteboardAnswerCorrect && turn.text.includes("Very good!")) {
+        setHasWhiteboardAnswerCorrect(true);
+        // Automatically trigger submission when whiteboard answer is confirmed
+        void onSubmitPractice();
+      }
+    },
+  });
+
+  // Store sendChatMessage in ref so it's available in onSubmitPractice callback
   useEffect(() => {
-    return () => {
-      setChatTurns([]);
-      setInput("");
-      setIsStreaming(false);
-      setStreamingText("");
-      setStreamingTurnType(null);
+    sendChatMessageRef.current = sendChatMessage;
+  }, [sendChatMessage]);
+
+  // Generate problem on mount and show as first assistant message
+  useEffect(() => {
+    const generateInitialProblem = async () => {
+      if (problemText || chatTurns.length > 0) return; // Already have problem or chat started
+
+      setIsGenerating(true);
+      try {
+        // Generate problem
+        const result = await generateProblemMutation.mutateAsync();
+        const rawProblem = result.problemText; // e.g., "6 - 3"
+
+        // Format as AI question
+        const aiMessage = `Hi! Let's work on this problem together. What is ${rawProblem}?`;
+
+        // Create AI turn
+        const aiTurn = {
+          id: crypto.randomUUID(),
+          conversationId,
+          role: "assistant" as const,
+          text: aiMessage,
+          latex: null,
+          tool: null,
+          createdAt: new Date(),
+        };
+
+        // Update store
+        usePracticeStore.setState({
+          conversationId,
+          problemText: rawProblem, // Keep raw for grading
+          chatTurns: [aiTurn],
+          isInitialized: true,
+        });
+
+        // Auto-start timer
+        usePracticeStore.getState().startTimer();
+      } catch (error) {
+        console.error("Failed to generate problem:", error);
+      } finally {
+        setIsGenerating(false);
+      }
     };
-  }, [conversationId, setChatTurns]);
+
+    void generateInitialProblem();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatTurns, isStreaming, streamingText]);
 
-  const utils = api.useUtils();
-  const [subscriptionEnabled, setSubscriptionEnabled] = useState(false);
-  const [subscriptionInput, setSubscriptionInput] = useState<{
-    conversationId: string;
-    userText?: string;
-    userLatex?: string;
-    ephemeral: boolean;
-    problemText?: string;
-    conversationHistory?: Array<{
-      role: "user" | "assistant";
-      text: string | null;
-      latex: string | null;
-    }>;
-  } | null>(null);
-
-  // Auto-send problem text to AI when practice starts
-  useEffect(() => {
-    if (
-      isPracticeActive &&
-      problemText?.trim() &&
-      chatTurns.length === 0 &&
-      !isStreaming &&
-      !subscriptionEnabled
-    ) {
-      // Start streaming
-      setIsStreaming(true);
-      setStreamingText("");
-      setStreamingTurnType(null);
-
-      // Trigger subscription with problemText directly
-      // This will cause the AI to start the conversation without showing a user message
-      setSubscriptionInput({
-        conversationId,
-        problemText: problemText.trim(),
-        ephemeral: true,
-        conversationHistory: [], // First message, no history yet
-      });
-      setSubscriptionEnabled(true);
-    }
-  }, [
-    isPracticeActive,
-    problemText,
-    chatTurns.length,
-    isStreaming,
-    subscriptionEnabled,
-    conversationId,
-  ]);
-
-  // Handle triggerMessage from store (e.g., whiteboard submit)
-  // Allow processing even while streaming to enable re-submissions
-  useEffect(() => {
-    if (
-      triggerMessage?.trim() &&
-      triggerMessage !== lastTriggerMessageRef.current &&
-      conversationId
-    ) {
-      // Mark this message as processed
-      lastTriggerMessageRef.current = triggerMessage;
-
-      // Create user turn immediately (optimistic update, ephemeral)
-      const userTurn: Turn = {
-        id: crypto.randomUUID(),
-        conversationId,
-        role: "user",
-        text: triggerMessage.trim(),
-        latex: null,
-        tool: null,
-        createdAt: new Date(),
-      };
-      const newTurns = [...chatTurns, userTurn];
-      setChatTurns(newTurns);
-
-      // Start streaming
-      setIsStreaming(true);
-      setStreamingText("");
-      setStreamingTurnType(null);
-
-      // Trigger subscription with ephemeral flag and conversation history
-      const historyWithoutCurrent = chatTurns.map((turn) => ({
-        role: turn.role,
-        text: turn.text,
-        latex: turn.latex,
-      }));
-      setSubscriptionInput({
-        conversationId,
-        userText: triggerMessage.trim(),
-        ephemeral: true,
-        conversationHistory: historyWithoutCurrent,
-      });
-      setSubscriptionEnabled(true);
-    }
-  }, [triggerMessage, conversationId, chatTurns, setChatTurns]);
-
-  // Set up subscription with ephemeral flag
-  api.ai.tutorTurn.useSubscription(
-    subscriptionInput ?? {
-      conversationId: "",
-      userText: "",
-      ephemeral: true,
+  // Expose sendMessage to parent via ref
+  useImperativeHandle(ref, () => ({
+    sendMessage: (text: string) => {
+      if (isStreaming || !text.trim()) return;
+      sendChatMessage({ text, ephemeral: true });
     },
-    {
-      enabled: subscriptionEnabled && !!subscriptionInput && !!conversationId,
-      onData: (data) => {
-        if (data.type === "text" && data.content) {
-          setStreamingText((prev) => prev + data.content);
-        } else if (data.type === "boardAnnotation") {
-          // Board annotations were added - refetch board to update Whiteboard
-          void utils.board.get.invalidate({ conversationId });
-        } else if (data.type === "done") {
-          // Create a turn object from the done message (ephemeral, no DB ID)
-          if (data.fullText !== undefined) {
-            const turn: Turn = {
-              id: crypto.randomUUID(), // Generate temporary ID for ephemeral turn
-              conversationId,
-              role: "assistant",
-              text: data.fullText,
-              latex: data.latex ?? null,
-              tool: data.turnType ? { type: data.turnType } : null,
-              createdAt: new Date(),
-            };
-            const newTurns = [...chatTurns, turn];
-            setChatTurns(newTurns);
-            setIsStreaming(false);
-            setStreamingText("");
-            setStreamingTurnType(null);
+  }));
 
-            // Track hints
-            if (data.turnType === "hint") {
-              incrementHints();
-            }
-          }
-          // Refetch board in case annotations were added
-          void utils.board.get.invalidate({ conversationId });
-          // Disable subscription after completion
-          setSubscriptionEnabled(false);
-          setSubscriptionInput(null);
-          // Reset lastTriggerMessageRef to allow re-submission of the same answer
-          lastTriggerMessageRef.current = null;
-        }
-      },
-      onError: (error) => {
-        console.error("Streaming error:", error);
-        setIsStreaming(false);
-        setStreamingText("");
-        setStreamingTurnType(null);
-        setSubscriptionEnabled(false);
-        setSubscriptionInput(null);
-        // Reset lastTriggerMessageRef to allow re-submission after error
-        lastTriggerMessageRef.current = null;
-      },
-    },
-  );
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !conversationId || isStreaming) return;
 
     const userText = input.trim();
     setInput("");
 
-    // Track chat attempt
     incrementChatAttempts();
-
-    // Create user turn immediately (optimistic update, ephemeral)
-    const userTurn: Turn = {
-      id: crypto.randomUUID(), // Temporary ID
-      conversationId,
-      role: "user",
-      text: userText,
-      latex: null,
-      tool: null,
-      createdAt: new Date(),
-    };
-    const newTurns = [...chatTurns, userTurn];
-    setChatTurns(newTurns);
-
-    // Start streaming
-    setIsStreaming(true);
-    setStreamingText("");
-    setStreamingTurnType(null);
-
-    // Trigger subscription with ephemeral flag and conversation history
-    // Exclude the current turn since it will be added by the server
-    const historyWithoutCurrent = chatTurns.map((turn) => ({
-      role: turn.role,
-      text: turn.text,
-      latex: turn.latex,
-    }));
-    setSubscriptionInput({
-      conversationId,
-      userText,
-      ephemeral: true,
-      conversationHistory: historyWithoutCurrent,
-    });
-    setSubscriptionEnabled(true);
+    sendChatMessage({ text: userText, ephemeral: true });
   };
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {chatTurns.length === 0 && !isStreaming && (
+        {isGenerating && chatTurns.length === 0 && (
           <div className="text-muted-foreground text-center">
-            Start practicing! Chat messages here are temporary and won&apos;t be
-            saved.
+            Generating problem...
           </div>
         )}
+
         {chatTurns.map((turn) => (
           <MessageBubble
             key={turn.id}
@@ -290,27 +212,55 @@ export function EphemeralChatPane({ conversationId }: EphemeralChatPaneProps) {
         )}
         <div ref={messagesEndRef} />
       </div>
-      <div className="space-y-2 border-t p-4">
-        <form onSubmit={handleSubmit}>
-          <div className="flex gap-2">
-            <Textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Type your message or math problem..."
-              className="min-h-[60px] resize-none"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void handleSubmit(e);
-                }
-              }}
-            />
-            <Button type="submit" disabled={!input.trim() || isStreaming}>
-              <Send className="h-4 w-4" />
-            </Button>
+
+      {/* Practice Controls */}
+      <div className="space-y-3 border-t p-4">
+        {/* Submit button - shown after chat answer is correct */}
+        {hasChatAnswerCorrect && !hasWhiteboardAnswerCorrect && (
+          <Button
+            onClick={onSubmitPractice}
+            disabled={isSubmitting || !problemText.trim()}
+            className="w-full"
+            size="lg"
+          >
+            <CheckCircle className="mr-2 h-4 w-4" />
+            {isSubmitting ? "Checking whiteboard..." : "Submit Whiteboard Answer"}
+          </Button>
+        )}
+
+        {/* Show message when whiteboard answer is being processed */}
+        {hasWhiteboardAnswerCorrect && (
+          <div className="flex items-center justify-center gap-2 rounded-lg border bg-green-50 p-3 text-sm font-medium text-green-700 dark:bg-green-950 dark:text-green-300">
+            <CheckCircle className="h-4 w-4" />
+            {isSubmitting
+              ? "Great job! Finalizing your results..."
+              : "Answer confirmed! Results will appear shortly..."}
           </div>
-        </form>
+        )}
+
+        {/* Chat Input - Available until chat answer is correct */}
+        {!hasChatAnswerCorrect && (
+          <form onSubmit={handleChatSubmit}>
+            <div className="flex gap-2">
+              <Textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask questions or show your work..."
+                className="min-h-[60px] resize-none"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    void handleChatSubmit(e);
+                  }
+                }}
+              />
+              <Button type="submit" disabled={!input.trim() || isStreaming}>
+                <Send className="h-4 w-4" />
+              </Button>
+            </div>
+          </form>
+        )}
       </div>
     </div>
   );
-}
+});

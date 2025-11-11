@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { api } from "@/trpc/react";
 import { WhiteboardPanel } from "./WhiteboardPanel";
 import { WhiteboardChatSidebar } from "./WhiteboardChatSidebar";
-import { ProblemHeader } from "./ProblemHeader";
 import { ResultsModal } from "./ResultsModal";
 import { NavBar } from "@/app/(app)/_components/NavBar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -14,6 +13,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useChatStore } from "@/store/useChatStore";
 import { useChildStore } from "@/store/useChildStore";
 import { usePracticeStore } from "@/store/usePracticeStore";
+import { ChatProvider } from "./ChatContext";
 
 export function WhiteboardClient() {
   const router = useRouter();
@@ -21,18 +21,15 @@ export function WhiteboardClient() {
   const conversationIdFromUrl = searchParams.get("id");
 
   const currentChildId = useChildStore((state) => state.currentChildId);
-  const [selectedConversationId, setSelectedConversationId] = useState<
-    string | null
-  >(conversationIdFromUrl);
-
-  const setConversationId = useChatStore(
-    (state) => state.setConversationId,
-  ) as (id: string | null) => void;
+  const storeConversationId = useChatStore((state) => state.conversationId);
 
   const createConversation = api.conversations.create.useMutation({
     onSuccess: (data) => {
-      setSelectedConversationId(data.conversationId);
-      router.push(`/app/whiteboard?id=${data.conversationId}`);
+      // Update both stores and URL in one place
+      const conversationId = data.conversationId;
+      useChatStore.setState({ conversationId });
+      usePracticeStore.setState({ conversationId });
+      void router.push(`/app/whiteboard?id=${conversationId}`);
     },
   });
 
@@ -42,50 +39,20 @@ export function WhiteboardClient() {
     { enabled: !!currentChildId },
   );
 
-  // Update conversation ID in store when selected
+  // Single useEffect: Initialize conversation from URL or create new one
   useEffect(() => {
-    if (selectedConversationId) {
-      setConversationId(selectedConversationId);
-    }
-  }, [selectedConversationId, setConversationId]);
-
-  // Sync URL with selected conversation
-  useEffect(() => {
-    if (
-      selectedConversationId &&
-      conversationIdFromUrl !== selectedConversationId
-    ) {
-      router.push(`/app/whiteboard?id=${selectedConversationId}`);
-    }
-  }, [selectedConversationId, conversationIdFromUrl, router]);
-
-  // Initialize from URL param
-  useEffect(() => {
-    if (
-      conversationIdFromUrl &&
-      conversationIdFromUrl !== selectedConversationId
-    ) {
-      setSelectedConversationId(conversationIdFromUrl);
-    }
-  }, [conversationIdFromUrl, selectedConversationId]);
-
-  // Create conversation automatically if none selected
-  useEffect(() => {
-    if (
-      !selectedConversationId &&
-      !createConversation.isPending &&
-      !conversationIdFromUrl
-    ) {
+    if (conversationIdFromUrl) {
+      // Update stores with URL conversation ID
+      useChatStore.setState({ conversationId: conversationIdFromUrl });
+      usePracticeStore.setState({ conversationId: conversationIdFromUrl });
+    } else if (!createConversation.isPending) {
+      // No conversation ID in URL, reset stores and create new one
+      usePracticeStore.getState().resetSession();
+      useChatStore.getState().resetConversation();
       createConversation.mutate({ path: "whiteboard" });
     }
-  }, [selectedConversationId, createConversation, conversationIdFromUrl]);
-
-  // Reset practice session when conversation changes
-  useEffect(() => {
-    if (selectedConversationId) {
-      usePracticeStore.getState().resetSession();
-    }
-  }, [selectedConversationId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Show loading state while checking if child data is available
   if (currentChildId && isTutorPersonaLoading) {
@@ -100,7 +67,11 @@ export function WhiteboardClient() {
   }
 
   // Show loading state while creating conversation
-  if (createConversation.isPending || !selectedConversationId) {
+  if (
+    createConversation.isPending ||
+    !conversationIdFromUrl ||
+    (storeConversationId && storeConversationId !== conversationIdFromUrl)
+  ) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
         <div className="space-y-4 text-center">
@@ -112,23 +83,21 @@ export function WhiteboardClient() {
   }
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
-    >
-      <SidebarInset>
-        <NavBar />
-        <div className="flex h-full flex-col">
-          <ProblemHeader conversationId={selectedConversationId} />
-          <WhiteboardPanel conversationId={selectedConversationId} />
-        </div>
-      </SidebarInset>
-      <WhiteboardChatSidebar conversationId={selectedConversationId} />
-      <ResultsModal conversationId={selectedConversationId} />
-    </SidebarProvider>
+    <ChatProvider>
+      <SidebarProvider
+        style={
+          {
+            "--sidebar-width": "calc(var(--spacing) * 72)",
+          } as React.CSSProperties
+        }
+      >
+        <SidebarInset>
+          <NavBar />
+          <WhiteboardPanel conversationId={conversationIdFromUrl} />
+        </SidebarInset>
+        <WhiteboardChatSidebar conversationId={conversationIdFromUrl} />
+        <ResultsModal conversationId={conversationIdFromUrl} />
+      </SidebarProvider>
+    </ChatProvider>
   );
 }
