@@ -233,6 +233,8 @@ export function ConversationClient() {
                 uploadedImages={uploadedImages}
                 onUploadSuccess={handleUploadSuccess}
                 onUploadError={handleUploadError}
+                tutorAvatarUrl={tutorPersona?.avatarUrl}
+                tutorDisplayName={tutorPersona?.displayName}
               />
             </div>
           </div>

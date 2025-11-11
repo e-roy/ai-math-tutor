@@ -34,10 +34,11 @@ export function WhiteboardClient() {
   });
 
   // Fetch tutor persona when child is selected
-  const { isLoading: isTutorPersonaLoading } = api.children.getTutor.useQuery(
-    { childId: currentChildId! },
-    { enabled: !!currentChildId },
-  );
+  const { data: tutorPersona, isLoading: isTutorPersonaLoading } =
+    api.children.getTutor.useQuery(
+      { childId: currentChildId! },
+      { enabled: !!currentChildId },
+    );
 
   // Single useEffect: Initialize conversation from URL or create new one
   useEffect(() => {
@@ -95,7 +96,11 @@ export function WhiteboardClient() {
           <NavBar />
           <WhiteboardPanel conversationId={conversationIdFromUrl} />
         </SidebarInset>
-        <WhiteboardChatSidebar conversationId={conversationIdFromUrl} />
+        <WhiteboardChatSidebar
+          conversationId={conversationIdFromUrl}
+          tutorAvatarUrl={tutorPersona?.avatarUrl}
+          tutorDisplayName={tutorPersona?.displayName}
+        />
         <ResultsModal conversationId={conversationIdFromUrl} />
       </SidebarProvider>
     </ChatProvider>

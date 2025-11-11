@@ -3,6 +3,7 @@
 import type { Turn } from "@/server/db/turns";
 import type { TurnType } from "@/types/ai";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { MathRenderer } from "@/app/(app)/app/conversation/_components/MathRenderer";
 import { MathText } from "@/app/(app)/app/conversation/_components/MathText";
 import { cn } from "@/lib/utils";
@@ -12,6 +13,8 @@ interface MessageBubbleProps {
   turnType?: TurnType | null;
   isStreaming?: boolean;
   streamingText?: string;
+  tutorAvatarUrl?: string;
+  tutorDisplayName?: string;
 }
 
 const turnTypeLabels: Record<TurnType, string> = {
@@ -34,6 +37,8 @@ export function MessageBubble({
   turnType,
   isStreaming = false,
   streamingText,
+  tutorAvatarUrl,
+  tutorDisplayName,
 }: MessageBubbleProps) {
   const isUser = turn.role === "user";
   const displayText = isStreaming && streamingText ? streamingText : turn.text;
@@ -43,8 +48,19 @@ export function MessageBubble({
 
   return (
     <div
-      className={cn("flex w-full", isUser ? "justify-end" : "justify-start")}
+      className={cn("flex w-full gap-2", isUser ? "justify-end" : "justify-start")}
     >
+      {!isUser && (tutorAvatarUrl || tutorDisplayName) && (
+        <Avatar className="size-8 shrink-0">
+          {tutorAvatarUrl ? (
+            <AvatarImage src={tutorAvatarUrl} alt={tutorDisplayName || "Tutor"} />
+          ) : (
+            <AvatarFallback className="text-xs">
+              {tutorDisplayName?.charAt(0).toUpperCase() || "T"}
+            </AvatarFallback>
+          )}
+        </Avatar>
+      )}
       <div
         className={cn(
           "max-w-[80%] rounded-lg px-4 py-2",

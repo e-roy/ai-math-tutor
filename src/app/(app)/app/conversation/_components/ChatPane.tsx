@@ -14,9 +14,15 @@ import { checkEquivalence } from "@/lib/math/equivalence";
 
 interface ChatPaneProps {
   conversationId: string;
+  tutorAvatarUrl?: string;
+  tutorDisplayName?: string;
 }
 
-export function ChatPane({ conversationId }: ChatPaneProps) {
+export function ChatPane({
+  conversationId,
+  tutorAvatarUrl,
+  tutorDisplayName,
+}: ChatPaneProps) {
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const {
@@ -256,6 +262,8 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
                     | undefined)
                 : undefined
             }
+            tutorAvatarUrl={tutorAvatarUrl}
+            tutorDisplayName={tutorDisplayName}
           />
         ))}
         {isStreaming && (
@@ -272,6 +280,8 @@ export function ChatPane({ conversationId }: ChatPaneProps) {
             turnType={streamingTurnType}
             isStreaming={true}
             streamingText={streamingText}
+            tutorAvatarUrl={tutorAvatarUrl}
+            tutorDisplayName={tutorDisplayName}
           />
         )}
         <div ref={messagesEndRef} />

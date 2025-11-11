@@ -12,6 +12,8 @@ import { Clock } from "lucide-react";
 
 interface WhiteboardChatSidebarProps {
   conversationId: string;
+  tutorAvatarUrl?: string;
+  tutorDisplayName?: string;
 }
 
 /**
@@ -32,6 +34,8 @@ function formatTime(ms: number): string {
  */
 export function WhiteboardChatSidebar({
   conversationId,
+  tutorAvatarUrl,
+  tutorDisplayName,
 }: WhiteboardChatSidebarProps) {
   const { chatRef } = useChatContext();
   const isTimerRunning = usePracticeStore((state) => state.isTimerRunning);
@@ -51,7 +55,12 @@ export function WhiteboardChatSidebar({
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <EphemeralChatPane ref={chatRef} conversationId={conversationId} />
+        <EphemeralChatPane
+          ref={chatRef}
+          conversationId={conversationId}
+          tutorAvatarUrl={tutorAvatarUrl}
+          tutorDisplayName={tutorDisplayName}
+        />
       </SidebarContent>
     </Sidebar>
   );

@@ -12,6 +12,8 @@ interface ProblemPanelProps {
   uploadedImages: UploadedImage[];
   onUploadSuccess: (fileId: string, blobUrl: string) => void;
   onUploadError: (error: Error) => void;
+  tutorAvatarUrl?: string;
+  tutorDisplayName?: string;
 }
 
 /**
@@ -23,6 +25,8 @@ export function ProblemPanel({
   uploadedImages,
   onUploadSuccess,
   onUploadError,
+  tutorAvatarUrl,
+  tutorDisplayName,
 }: ProblemPanelProps) {
   return (
     <div className="space-y-6 p-6">
@@ -103,7 +107,11 @@ export function ProblemPanel({
         </div>
         <div className="space-y-4">
           <div className="h-[600px] rounded-lg border">
-            <ChatPane conversationId={conversationId} />
+            <ChatPane
+              conversationId={conversationId}
+              tutorAvatarUrl={tutorAvatarUrl}
+              tutorDisplayName={tutorDisplayName}
+            />
           </div>
         </div>
       </div>

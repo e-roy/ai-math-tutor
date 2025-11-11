@@ -20,6 +20,8 @@ import { api } from "@/trpc/react";
 
 interface EphemeralChatPaneProps {
   conversationId: string;
+  tutorAvatarUrl?: string;
+  tutorDisplayName?: string;
 }
 
 export interface EphemeralChatPaneRef {
@@ -33,7 +35,10 @@ export interface EphemeralChatPaneRef {
 export const EphemeralChatPane = forwardRef<
   EphemeralChatPaneRef,
   EphemeralChatPaneProps
->(function EphemeralChatPane({ conversationId }, ref) {
+>(function EphemeralChatPane(
+  { conversationId, tutorAvatarUrl, tutorDisplayName },
+  ref,
+) {
   const problemText = usePracticeStore((state) => state.problemText);
   const chatTurns = usePracticeStore((state) => state.chatTurns);
   const incrementChatAttempts = usePracticeStore(
@@ -192,6 +197,8 @@ export const EphemeralChatPane = forwardRef<
                     | undefined)
                 : undefined
             }
+            tutorAvatarUrl={tutorAvatarUrl}
+            tutorDisplayName={tutorDisplayName}
           />
         ))}
         {isStreaming && (
@@ -208,6 +215,8 @@ export const EphemeralChatPane = forwardRef<
             turnType={streamingTurnType}
             isStreaming={true}
             streamingText={streamingText}
+            tutorAvatarUrl={tutorAvatarUrl}
+            tutorDisplayName={tutorDisplayName}
           />
         )}
         <div ref={messagesEndRef} />
