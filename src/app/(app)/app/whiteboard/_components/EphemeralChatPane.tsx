@@ -51,7 +51,7 @@ export const EphemeralChatPane = forwardRef<
   const [hasChatAnswerCorrect, setHasChatAnswerCorrect] = useState(false);
   const [hasWhiteboardAnswerCorrect, setHasWhiteboardAnswerCorrect] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const sendChatMessageRef = useRef<((message: { text: string; ephemeral: boolean }) => void) | null>(null);
+  const sendChatMessageRef = useRef<((message: { text: string; ephemeral: boolean; isWhiteboardSubmission?: boolean }) => void) | null>(null);
 
   const utils = api.useUtils();
   const generateProblemMutation = api.practice.generateProblem.useMutation();
@@ -65,9 +65,9 @@ export const EphemeralChatPane = forwardRef<
       problemText,
       chatTurns,
       onAnswerChecked: (answer: string) => {
-        // Send the answer check result to chat if sendChatMessage is available
+        // Send the answer check result to chat with whiteboard flag
         if (sendChatMessageRef.current) {
-          sendChatMessageRef.current({ text: answer, ephemeral: true });
+          sendChatMessageRef.current({ text: answer, ephemeral: true, isWhiteboardSubmission: true });
         }
       },
     });

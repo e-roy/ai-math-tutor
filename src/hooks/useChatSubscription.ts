@@ -19,6 +19,7 @@ interface ChatMessage {
   latex?: string;
   ephemeral?: boolean;
   problemText?: string;
+  isWhiteboardSubmission?: boolean;
   conversationHistory?: Array<{
     role: "user" | "assistant";
     text: string | null;
@@ -47,6 +48,7 @@ export function useChatSubscription({
     userLatex?: string;
     ephemeral: boolean;
     problemText?: string;
+    isWhiteboardSubmission?: boolean;
     conversationHistory?: Array<{
       role: "user" | "assistant";
       text: string | null;
@@ -151,6 +153,7 @@ export function useChatSubscription({
         userLatex: message.latex,
         ephemeral: message.ephemeral ?? true,
         problemText: message.problemText,
+        isWhiteboardSubmission: message.isWhiteboardSubmission,
         conversationHistory: historyWithoutCurrent,
       });
       setSubscriptionEnabled(true);

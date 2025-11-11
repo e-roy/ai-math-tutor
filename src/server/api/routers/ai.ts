@@ -112,6 +112,7 @@ export const aiRouter = createTRPCRouter({
         ephemeral: z.boolean().optional(),
         problemText: z.string().optional(),
         isHintRequest: z.boolean().optional(),
+        isWhiteboardSubmission: z.boolean().optional(),
         conversationHistory: z
           .array(
             z.object({
@@ -245,15 +246,25 @@ export const aiRouter = createTRPCRouter({
       const problemText: string | null = input.problemText ?? null;
 
       // Get conversation meta for difficulty and grade
-      const conversationMeta = (conversation.meta as Record<string, unknown>) ?? {};
-      const difficulty = (conversationMeta.difficulty as "support" | "balanced" | "challenge") ?? "balanced";
+      const conversationMeta =
+        (conversation.meta as Record<string, unknown>) ?? {};
+      const difficulty =
+        (conversationMeta.difficulty as "support" | "balanced" | "challenge") ??
+        "balanced";
       const grade = (conversationMeta.grade as string) ?? "default";
 
       // Build conversation history from turns
       // Detect problem type and get specific guidance
-      // Use adapted prompt based on child's grade and difficulty preference
-      let systemPrompt = getAdaptedSocraticPrompt(grade, difficulty);
-      
+      // Use different prompts for ephemeral (whiteboard) vs persistent (conversation) paths
+      let systemPrompt: string;
+      if (isEphemeral) {
+        // Whiteboard path: Use simple, direct prompt with exact phrases
+        systemPrompt = SOCRATIC_SYSTEM_PROMPT;
+      } else {
+        // Conversation path: Use adapted Socratic prompt for teaching
+        systemPrompt = getAdaptedSocraticPrompt(grade, difficulty);
+      }
+
       // Handle hint request
       if (input.isHintRequest) {
         systemPrompt += `\n\n## Hint Request\nThe student has explicitly requested a hint. Provide a concrete, helpful hint that guides them toward the solution WITHOUT giving the answer directly. Use encouraging language and focus on the next step they should take or concept they should consider.`;
@@ -263,8 +274,10 @@ export const aiRouter = createTRPCRouter({
         const problemType = detectProblemType(problemText);
         const typeGuidance = getProblemTypeGuidance(problemType);
 
-        // Add problem type context to system prompt
-        systemPrompt += `\n\n## Current Problem Context\nProblem Type: ${problemType}\nGuidance: ${typeGuidance}\nProblem Text: ${problemText}\n\nAdapt your questions to this specific problem type.`;
+        // Add problem type context only for conversation path (not whiteboard)
+        if (!isEphemeral) {
+          systemPrompt += `\n\n## Current Problem Context\nProblem Type: ${problemType}\nGuidance: ${typeGuidance}\nProblem Text: ${problemText}\n\nAdapt your questions to this specific problem type.`;
+        }
 
         // Add problem text context to system prompt
         // The AI should ask "What is {equation}?" as the first question
@@ -275,12 +288,14 @@ export const aiRouter = createTRPCRouter({
 
         if (isFirstMessage) {
           systemPrompt += `\n\n[Internal context: The student is starting a new problem. The problem/equation is: "${problemText}". Your FIRST message must be: "What is ${problemText}?"]`;
+        } else if (input.isWhiteboardSubmission) {
+          systemPrompt += `\n\n[Internal context: The student has written their answer on the whiteboard and submitted it. You MUST use the checkAnswer tool with studentAnswer=(their answer) and problemText="${problemText}" to verify correctness. The checkAnswer tool will return isCorrect (true/false) and solvedAnswer (the correct answer).
+
+For whiteboard submissions: Use "Can you try again?" for wrong answers, or "Very good!" for correct answers.]`;
         } else {
-          systemPrompt += `\n\n[Internal context: The student is working on this problem: "${problemText}". When the student provides an answer (from chat or whiteboard), you MUST use the checkAnswer tool with studentAnswer=(their answer) and problemText="${problemText}" to verify correctness. The checkAnswer tool will return isCorrect (true/false) and solvedAnswer (the correct answer). 
+          systemPrompt += `\n\n[Internal context: The student is working on this problem: "${problemText}". When the student provides an answer, you MUST use the checkAnswer tool with studentAnswer=(their answer) and problemText="${problemText}" to verify correctness. The checkAnswer tool will return isCorrect (true/false) and solvedAnswer (the correct answer). 
 
-For chat answers: Use "That isn't correct, can you try again?" for wrong answers, or "Correct! Can you write {solvedAnswer} on the board?" for correct answers.
-
-For whiteboard submissions (after asking them to write on board): Use "Can you try again?" for wrong answers, or "Very good!" for correct answers.]`;
+For chat answers: Use "That isn't correct, can you try again?" for wrong answers, or "Correct! Can you write {solvedAnswer} on the board?" for correct answers.]`;
         }
       }
 
@@ -683,12 +698,12 @@ For whiteboard submissions (after asking them to write on board): Use "Can you t
 
       // Build conversation history from turns
       let systemPrompt: string = SOCRATIC_CONVERSATION_PROMPT;
-      
+
       // Detect problem type and add guidance
       if (problemText) {
         const problemType = detectProblemType(problemText);
         const typeGuidance = getProblemTypeGuidance(problemType);
-        
+
         if (previousTurns.length === 0) {
           // Add problem context for first message
           systemPrompt = `${systemPrompt}\n\n[Internal context: The student is starting a new ${problemType} problem: "${problemText}". ${typeGuidance}]`;
@@ -713,7 +728,8 @@ For whiteboard submissions (after asking them to write on board): Use "Can you t
       // Phase tracking: Determine current phase and add guidance
       const currentPhase = determineCurrentPhase(previousTurns);
       const phaseGuidance = {
-        "parse-problem": "Help the student understand what the problem is asking.",
+        "parse-problem":
+          "Help the student understand what the problem is asking.",
         "inventory-knowns": "Guide them to list what information they have.",
         "identify-goal": "Ask what they need to find or solve for.",
         "select-method": "Help them choose an approach or formula.",
